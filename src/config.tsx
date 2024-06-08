@@ -2,7 +2,6 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 import { getAuth, User, onAuthStateChanged, setPersistence, browserLocalPersistence } from "firebase/auth";
 import { getFirestore, doc, getDoc } from "firebase/firestore";
 import { initializeApp } from "firebase/app";
-import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import LZString from 'lz-string';
 
@@ -23,22 +22,22 @@ const auth = getAuth(app);
 
 setPersistence(auth, browserLocalPersistence);
 
-interface ContactsContextProps {
-  contacts: any[];
+interface ConfigContextProps {
+  config: any;
   isLoading: boolean;
 }
 
-const ContactsContext = createContext<ContactsContextProps | undefined>(undefined);
+const ConfigContext = createContext<ConfigContextProps | undefined>(undefined);
 
-export const ContactsProvider = ({ children }: { children: ReactNode }) => {
-  const [contacts, setContacts] = useState<any[]>([]);
+export const ConfigProvider = ({ children }: { children: ReactNode }) => {
+  const [config, setConfig] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
     // Clear the session flag when the page reloads
     window.addEventListener('beforeunload', () => {
-      sessionStorage.removeItem('contactsFetched');
+      sessionStorage.removeItem('configFetched');
     });
 
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -48,25 +47,17 @@ export const ContactsProvider = ({ children }: { children: ReactNode }) => {
 
     window.addEventListener('beforeunload', handleBeforeUnload);
 
-    const shouldFetchContacts = !sessionStorage.getItem('contactsFetched');
+    const shouldFetchConfig = !sessionStorage.getItem('configFetched');
 
-    if (shouldFetchContacts) {
-      fetchContactsOnAuthChange();
-    } else {
-      const storedContacts = localStorage.getItem('contacts');
-      if (storedContacts) {
-        setContacts(JSON.parse(LZString.decompress(storedContacts)!));
-      }
-      setIsLoading(false);
-    }
+    fetchConfigOnAuthChange();
 
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, [navigate]);
 
-  const fetchContactsOnAuthChange = () => {
-    const fetchContacts = async (user: User) => {
+  const fetchConfigOnAuthChange = () => {
+    const fetchConfig = async (user: User) => {
       try {
         setIsLoading(true);
 
@@ -93,17 +84,15 @@ export const ContactsProvider = ({ children }: { children: ReactNode }) => {
 
         const data = docSnapshot.data();
 
-        const url = `https://buds-359313.et.r.appspot.com/api/chats/${data?.whapiToken}/${data?.ghl_location}/${data?.ghl_accessToken}/${dataUser.name}/${dataUser.role}/${dataUser.email}`;
-        const response = await axios.get(url);
+        // Store the configuration data
+        setConfig(data);
+        localStorage.setItem('config', LZString.compress(JSON.stringify(data)));
+        sessionStorage.setItem('configFetched', 'true'); // Mark that config has been fetched in this session
 
-        setContacts(response.data.contacts);
-        const contactsWithChatPic = response.data.contacts.filter((contact: { chat_pic: any; }) => contact.chat_pic);
-console.log('Contacts with chat_pic:', contactsWithChatPic);
-        localStorage.setItem('contacts', LZString.compress(JSON.stringify(response.data.contacts)));
-        sessionStorage.setItem('contactsFetched', 'true'); // Mark that contacts have been fetched in this session
-        navigate('/chat');  // Navigate to the chat page after fetching contacts
+        // You can navigate to a specific page if needed
+        // navigate('/somePage');  
       } catch (error) {
-        console.error('Error fetching contacts:', error);
+        console.error('Error fetching config:', error);
       } finally {
         setIsLoading(false);
       }
@@ -111,7 +100,7 @@ console.log('Contacts with chat_pic:', contactsWithChatPic);
 
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
-        fetchContacts(user);
+        fetchConfig(user);
       } else {
         navigate('/login');  // Redirect to login page if not authenticated
         setIsLoading(false);
@@ -122,18 +111,18 @@ console.log('Contacts with chat_pic:', contactsWithChatPic);
   };
 
   return (
-    <ContactsContext.Provider value={{ contacts, isLoading }}>
+    <ConfigContext.Provider value={{ config, isLoading }}>
       {children}
-    </ContactsContext.Provider>
+    </ConfigContext.Provider>
   );
 };
 
-export const useContacts = () => {
-  const context = useContext(ContactsContext);
+export const useConfig = () => {
+  const context = useContext(ConfigContext);
   if (context === undefined) {
-    throw new Error('useContacts must be used within a ContactsProvider');
+    throw new Error('useConfig must be used within a ConfigProvider');
   }
   return context;
 };
 
-export { ContactsContext };
+export { ConfigContext };
