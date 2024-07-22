@@ -20,16 +20,16 @@ const menu: Array<Menu | "divider"> = [
     pathname: "/opp",
     title: "Opportunities",
   },
-  {
-    icon: "AreaChart",
-    pathname: "/dashboard",
-    title: "Stats",
-  },
-  {
-      icon: "Bot",
-      pathname: "/inbox",
-      title: "Assistant",
-    },
+  // {
+  //   icon: "AreaChart",
+  //   pathname: "/dashboard",
+  //   title: "Stats",
+  // },
+  // {
+  //     icon: "Bot",
+  //     pathname: "/inbox",
+  //     title: "Assistant",
+  //   },
     /*
     {
       icon: "HardDrive",
