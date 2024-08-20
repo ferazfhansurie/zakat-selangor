@@ -51,9 +51,13 @@ interface Contact {
 const app = initializeApp(firebaseConfig);
 const firestore = getFirestore(app);
 
+interface QRCodeData {
+  phoneIndex: number;
+  status: string;
+  qrCode: string | null;
+}
 
-
-function LoadingPage() {
+function LoadingPage2() {
   const [progress, setProgress] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -76,6 +80,8 @@ function LoadingPage() {
   const location = useLocation();
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [isFetchingChats, setIsFetchingChats] = useState(false);
+  const [qrCodes, setQrCodes] = useState<QRCodeData[]>([]);
+  const [currentQrIndex, setCurrentQrIndex] = useState<number | null>(null);
   
   const fetchQRCode = async () => {
     const auth = getAuth(app);
@@ -103,17 +109,6 @@ function LoadingPage() {
       const companyData = docSnapshot.data();
       v2 = companyData.v2;
       setV2(v2);
-      if (!v2) {
-        // If "v2" is not present or is false, navigate to the next page
-        if (location.pathname === '/loading') {
-          if (initialContacts.name === "Infinity Pilates & Physiotherapy") {
-            navigate('/calendar');
-          } else {
-            navigate('/chat');
-          }
-        }
-        return;
-      }
 
       // Only proceed with QR code and bot status if v2 exists
       const botStatusResponse = await axios.get(`https://mighty-dane-newly.ngrok-free.app/api/bot-status/${companyId}`);
@@ -122,27 +117,21 @@ function LoadingPage() {
       if (botStatusResponse.status !== 200) {
         throw new Error(`Unexpected response status: ${botStatusResponse.status}`);
       }
-      let phoneCount = companyData.phoneCount??null;
-      if(phoneCount === null){
-        const { status, qrCode } = botStatusResponse.data;
-        console.log(botStatusResponse.data); 
-        console.log('phonecount is 0'); 
-        setBotStatus(status);
-        if (status === 'qr') {
-          setQrCodeImage(qrCode);
-          console.log({companyId});
-        } else if (status === 'authenticated' || status === 'ready') {
-          console.log("Bot authenticated, preparing to fetch contacts");
-          setShouldFetchContacts(true);
-        }
-      }else{
-        console.log(botStatusResponse.data[0])
-        if(botStatusResponse.data[0].status === 'authenticated' || botStatusResponse.data[0].status === 'ready'){
-          console.log("Bot authenticated, preparing to fetch contacts");
-          setShouldFetchContacts(true);
-        }
+
+      const qrCodesData: QRCodeData[] = botStatusResponse.data;
+      setQrCodes(qrCodesData);
+
+      const qrIndex = qrCodesData.findIndex(qr => qr.status === 'qr');
+      if (qrIndex !== -1) {
+        setCurrentQrIndex(qrIndex);
+        setQrCodeImage(qrCodesData[qrIndex].qrCode);
+        setBotStatus('qr');
+      } else {
+        setCurrentQrIndex(null);
+        setQrCodeImage(null);
+        setBotStatus(qrCodesData.every(qr => qr.status === 'ready') ? 'ready' : 'initializing');
       }
-   
+
       setIsLoading(false);
     } catch (error) {
       setIsLoading(false);
@@ -247,10 +236,7 @@ function LoadingPage() {
 
   useEffect(() => {
     console.log("Contact state changed. contactsFetched:", contactsFetched, "fetchedChats:", fetchedChats, "totalChats:", totalChats, "contacts length:", contacts.length);
-    if (contactsFetched && fetchedChats === totalChats && contacts.length > 0) {
-      console.log('Contacts and chats fetched and loaded, navigating to chat');
-      navigate('/chat');
-    }
+ 
   }, [contactsFetched, fetchedChats, totalChats, contacts, navigate]);
 
   const fetchContacts = async () => {
@@ -344,9 +330,7 @@ function LoadingPage() {
     
       console.log("Contacts fetched:", allContacts.length);
       setContacts(allContacts);
-      if(allContacts.length === 0){
-        navigate('/chat');
-      }
+
       localStorage.setItem('contacts', LZString.compress(JSON.stringify(allContacts)));
       sessionStorage.setItem('contactsFetched', 'true'); // Mark that contacts have been fetched in this session
       setContactsFetched(true);
@@ -399,13 +383,7 @@ function LoadingPage() {
 
   const handleLogout = async () => {
     const auth = getAuth(app);
-    try {
-      await signOut(auth);
-      navigate('/login'); // Adjust this to your login route
-    } catch (error) {
-      console.error("Error signing out: ", error);
-      setError('Failed to log out. Please try again.');
-    }
+  
   };
 
   return (
@@ -414,10 +392,13 @@ function LoadingPage() {
         <img alt="Logo" className="w-40 h-40 p-25" src={logoUrl} />
         {v2 ? (
           <>
-            {botStatus === 'qr' ? (
+            {botStatus === 'qr' && currentQrIndex !== null ? (
               <>
                 <div className="mt-2 text-md p-25 text-gray-800 dark:text-gray-200">
                   Please use your WhatsApp QR scanner to scan the code and proceed.
+                </div>
+                <div className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                  Scanning QR for Phone : {qrCodes[currentQrIndex].phoneIndex+1}
                 </div>
                 <hr className="w-full my-4 border-t border-gray-300 dark:border-gray-700" />
                 {error && <div className="text-red-500 dark:text-red-400 mt-2">{error}</div>}
@@ -430,10 +411,10 @@ function LoadingPage() {
             ) : (
               <>
                 <div className="mt-2 text-xs p-15 text-gray-800 dark:text-gray-200">
-                  {botStatus === 'authenticated' || botStatus === 'ready' 
-                    ? 'Authentication successful. Loading contacts...' 
+                  {botStatus === 'ready' 
+                    ? 'All phones are authenticated. Loading contacts...' 
                     : botStatus === 'initializing'
-                      ? 'Initializing WhatsApp connection...'
+                      ? 'Initializing WhatsApp connections...'
                       : 'Fetching Data...'}
                 </div>
                 {isProcessingChats && (
@@ -473,12 +454,6 @@ function LoadingPage() {
               Refresh
             </button>
             
-            <button
-              onClick={handleLogout}
-              className="mt-4 px-6 py-3 bg-red-500 text-white text-lg font-semibold rounded hover:bg-red-600 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 w-full"
-            >
-              Logout
-            </button>
             
             {error && <div className="mt-2 text-red-500 dark:text-red-400">{error}</div>}
           </>
@@ -492,4 +467,4 @@ function LoadingPage() {
   );
 }
 
-export default LoadingPage;
+export default LoadingPage2;
