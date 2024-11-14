@@ -889,17 +889,24 @@ const ReactionPicker = ({ onSelect, onClose }: { onSelect: (emoji: string) => vo
   }, [messageSearchQuery, messages]);
 
   const scrollToMessage = (messageId: string) => {
-    if (messageListRef.current) {
-      const messageElement = messageListRef.current.querySelector(`[data-message-id="${messageId}"]`);
-      if (messageElement) {
-        messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        messageElement.classList.add('highlight-message');
+    console.log('Scrolling to message:', messageId);
+    // Add a small delay to ensure the message list has rendered
+    setTimeout(() => {
+      const element = messageListRef.current?.querySelector(`[data-message-id="${messageId}"]`);
+      if (element) {
+        // Scroll the message into view with smooth behavior
+        element.scrollIntoView({ 
+          behavior: 'smooth',
+          block: 'center'  // Centers the message in the viewport
+        });
+  
+        // Add highlight effect
+        element.classList.add('highlight-message');
         setTimeout(() => {
-          messageElement.classList.remove('highlight-message');
+          element.classList.remove('highlight-message');
         }, 2000);
       }
-    }
-    setIsMessageSearchOpen(false); // Close the search panel after clicking a result
+    }, 100);
   };
 
   useEffect(() => {
@@ -6808,6 +6815,7 @@ console.log(prompt);
                           className="p-2 mb-2 rounded bg-gray-200 dark:bg-gray-800 cursor-pointer hover:bg-gray-300 dark:hover:bg-gray-700"
                           onClick={() => {
                             const quotedMessageId = message.text?.context?.quoted_message_id;
+                            console.log('Quoted message ID:',  message);
                             if (quotedMessageId) {
                               scrollToMessage(quotedMessageId);
                               // Optionally add visual feedback
@@ -7827,6 +7835,47 @@ console.log(prompt);
                 </div>
               ))}         
             </div>
+            {/* Profile Analysis Section */}
+  <div className="col-span-2 border-t border-gray-200 dark:border-gray-600 mt-6 pt-6">
+    <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-4">Profile Analysis</h3>
+    {selectedContact.profile?.analysis ? (
+      <div className="space-y-4 bg-gray-50 dark:bg-gray-750 rounded-lg p-4">
+        {selectedContact.profile.analysis.split('\n').map((line: any, index: number) => {
+          if (line.trim().startsWith('User Profile Analysis')) {
+            return (
+              <h4 key={index} className="font-bold text-gray-800 dark:text-gray-200">
+                {line.trim()}
+              </h4>
+            );
+          } else if (line.trim().startsWith('Final Note:')) {
+            return (
+              <p key={index} className="text-gray-800 dark:text-gray-200 font-semibold bg-yellow-50 dark:bg-yellow-900/50 p-2 rounded">
+                {line.trim()}
+              </p>
+            );
+          } else if (line.trim()) {
+            const [title, ...content] = line.trim().split(':');
+            if (content.length > 0) {
+              return (
+                <div key={index} className="flex flex-col space-y-1">
+                  <span className="font-medium text-gray-700 dark:text-gray-300">{title}:</span>
+                  <span className="text-gray-600 dark:text-gray-400 pl-4">{content.join(':')}</span>
+                </div>
+              );
+            }
+            return (
+              <p key={index} className="text-gray-700 dark:text-gray-300">
+                {line.trim()}
+              </p>
+            );
+          }
+          return null;
+        })}
+      </div>
+    ) : (
+      <p className="text-gray-500 dark:text-gray-400 italic">No profile analysis available</p>
+    )}
+  </div>
             <div className="border-t border-gray-200 dark:border-gray-600 mt-4 pt-4"></div>
             {selectedContact.tags.some((tag: string) => employeeList.some(employee => employee.name.toLowerCase() === tag.toLowerCase())) && (
                     <div className="w-full">
@@ -7849,7 +7898,9 @@ console.log(prompt);
                     </div>
                   )}
           </div>
+          
         </div>
+        
         <div className="bg-white dark:bg-gray-700 rounded-lg shadow-md overflow-hidden">
           <div className="bg-indigo-50 dark:bg-indigo-900 px-4 py-3 border-b border-gray-200 dark:border-gray-600">
             <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">Tags</h3>
