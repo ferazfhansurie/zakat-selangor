@@ -92,9 +92,77 @@ function Main() {
     englishProficiency?:string | null;
     passport?:string | null;
     customFields?: { [key: string]: string };
-
+    zakatData?: ZakatData[];
   }
   
+  type ZakatType = 
+  | 'Simpanan' 
+  | 'PerniagaanOrganisasi' 
+  | 'PerniagaanIndividu' 
+  | 'Perak' 
+  | 'Pendapatan' 
+  | 'Pelaburan' 
+  | 'Padi' 
+  | 'KWSP' 
+  | 'Fitrah' 
+  | 'Emas' 
+  | 'Ternakan' 
+  | 'Qadha' 
+  | 'Unknown';
+
+  interface ZakatData {
+    type: ZakatType;
+    paymentStatus: string | null;
+    paymentDate: string | null;
+    paymentAmount: number | null;
+    transactionId: string | null;
+    entryDate: string | null;
+    dateUpdated: string | null;
+    sourceUrl: string | null;
+    total: number | null;
+    productName: string | null;
+    productPrice: string | null;
+    productQuantity: string | null;
+    consent: string | null;
+    consentText: string | null;
+    consentDescription: string | null;
+    createdBy: string | null;
+    entryId: string | null;
+    postId: string | null;
+    userAgent: string | null;
+    userIp: string | null;
+    timestamp: Timestamp | null;
+    
+    // Type-specific fields
+    totalSavings: number | null;
+    businessProfit: number | null;
+    companyName: string | null;
+    ssmNumber: string | null;
+    orgPhone: string | null;
+    officerName: string | null;
+    officerPhone: string | null;
+    officeAddress: {
+      street: string | null;
+      addressLine2: string | null;
+      city: string | null;
+      state: string | null;
+      postcode: string | null;
+      country: string | null;
+    } | null;
+    silverValue: number | null;
+    monthlyIncome: number | null;
+    otherAnnualIncome: number | null;
+    monthlyZakat: number | null;
+    annualZakat: number | null;
+    paymentOption: string | null;
+    investmentTotal: number | null;
+    year: string | null;
+    epfAmount: number | null;
+    riceType: string | null;
+    dependents: number | null;
+    goldValue: number | null;
+    zakatAmount: number | null;
+  }
   interface Employee {
     id: string;
     name: string;
@@ -647,7 +715,7 @@ const formatPhoneNumber = (phone: string): string => {
     : `60${digits}`;
   
   // Add the '+' at the beginning
-  return `+${formattedNumber}`;
+  return `${formattedNumber}`;
 };
 
 const handleSaveNewContact = async () => {
@@ -2117,20 +2185,25 @@ const sendBlastMessage = async () => {
     try {
       setLoading(true);
   
-      // Read CSV data
+      // Read CSV data with proper handling of quoted fields
       const parseCSV = async (): Promise<Array<any>> => {
         return new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = (event) => {
             const text = event.target?.result as string;
             const lines = text.split('\n');
-            const headers = lines[0].toLowerCase().trim().split(',');
+            const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+            
             const data = lines.slice(1)
-              .filter(line => line.trim()) // Skip empty lines
+              .filter(line => line.trim())
               .map(line => {
-                const values = line.split(',');
+                // Handle quoted fields properly
+                const values = line.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || [];
                 return headers.reduce((obj: any, header, index) => {
-                  obj[header.trim()] = values[index]?.trim() || '';
+                  let value = values[index] || '';
+                  // Remove quotes and trim
+                  value = value.replace(/^"|"$/g, '').trim();
+                  obj[header] = value;
                   return obj;
                 }, {});
               });
@@ -2156,13 +2229,20 @@ const sendBlastMessage = async () => {
       const contacts = await parseCSV();
       console.log('Parsed contacts:', contacts);
   
-      // Validate contacts
+      // Validate contacts based on form type
       const validContacts = contacts.filter(contact => {
-        const isValid = contact.contactname && contact.phone;
-        if (!isValid) {
+        const hasRequiredFields = contact['Source Url'] && (
+          contact['Nama Penuh'] || 
+          contact['Nama Syarikat/Organisasi']
+        ) && (
+          contact['No Telefon'] || 
+          contact['No Telefon Organisasi']
+        );
+  
+        if (!hasRequiredFields) {
           console.warn('Invalid contact:', contact);
         }
-        return isValid;
+        return hasRequiredFields;
       });
   
       if (validContacts.length === 0) {
@@ -2178,43 +2258,83 @@ const sendBlastMessage = async () => {
         const batchContacts = validContacts.slice(i, i + batchSize);
   
         for (const contact of batchContacts) {
-          // Format phone number (remove any non-digit characters and ensure it starts with country code)
-          const phoneNumber = contact.phone.replace(/\D/g, '');
-          if (!phoneNumber.match(/^\d{10,15}$/)) {
-            console.warn('Invalid phone number:', contact.phone);
+          // Format phone number based on contact type
+          const rawPhone = contact['No Telefon'] || contact['No Telefon Organisasi'];
+          const phoneNumber = await formatPhoneNumber(rawPhone);
+          
+          if (!phoneNumber) {
+            console.warn('Invalid phone number:', rawPhone);
             continue;
           }
   
-          const contactRef = doc(firestore, `companies/${companyId}/contacts`, phoneNumber);
-          
-          // Prepare contact data
-          const contactData = {
-            contactName: contact.contactname,
-            phone: phoneNumber,
-            email: contact.email || '',
-            lastName: contact.lastname || '',
-            companyName: contact.companyname || '',
-            address1: contact.address1 || '',
-            city: contact.city || '',
-            state: contact.state || '',
-            postalCode: contact.postalcode || '',
-            country: contact.country || '',
-            branch: contact.branch || userData.branch || '',
-            expiryDate: contact.expirydate || userData.expiryDate || '',
-            vehicleNumber: contact.vehiclenumber || userData.vehicleNumber || '',
-            points: contact.points || '0',
-            IC: contact.ic || '',
-            tags: [...new Set([...selectedImportTags, ...importTags])],
-            createdAt: Timestamp.now(),
-            updatedAt: Timestamp.now(),
-            createdBy: user.email,
-            updatedBy: user.email
-          };
+          const phoneWithPlus = '+' + phoneNumber;
+          const phoneWithoutPlus = phoneNumber;
+          const contactRef = doc(firestore, `companies/${companyId}/contacts`, phoneWithPlus);
   
-          // Log each contact being added
-          console.log('Adding contact:', contactData);
-          
-          batch.set(contactRef, contactData, { merge: true });
+          // Check if contact exists
+          const existingContact = await getDoc(contactRef);
+          const zakatData = createZakatData(contact);
+  
+          if (existingContact.exists()) {
+            // Update existing contact
+            const updateData = {
+              tags: arrayUnion(...selectedImportTags),
+              zakatData: arrayUnion(zakatData),
+              updatedAt: Timestamp.now(),
+              updatedBy: user.email
+            };
+  
+            // Update address if it's an organization
+            if (contact['Nama Syarikat/Organisasi']) {
+     
+            }
+  
+            batch.update(contactRef, updateData);
+            console.log(`Updated existing contact: ${contact['Nama Penuh'] || contact['Nama Syarikat/Organisasi']} - ${phoneWithPlus}`);
+          } else {
+            // Create new contact
+            const contactData = {
+              additionalEmails: [],
+              address1: contact['Nama Syarikat/Organisasi'] 
+                ? `${contact['Alamat Pejabat (Jalan)']} ${contact['Alamat Pejabat (Address Line 2)']}`.trim()
+                : `${contact['Alamat Penuh (Jalan)']} ${contact['Alamat Penuh (Address Line 2)']}`.trim(),
+              assignedTo: null,
+              businessId: null,
+              phone: phoneWithPlus,
+              tags: selectedImportTags,
+              chat: {
+                contact_id: phoneWithoutPlus,
+                id: phoneWithoutPlus + '@s.whatsapp.net',
+                name: contact['Nama Penuh'] || contact['Nama Syarikat/Organisasi'],
+                not_spam: true,
+                tags: selectedImportTags,
+                timestamp: Date.now(),
+                type: 'contact',
+                unreadCount: 0,
+                last_message: null,
+              },
+              chat_id: phoneWithoutPlus + '@s.whatsapp.net',
+              city: contact['Alamat Penuh (Bandar)'] || contact['Alamat Pejabat (Bandar)'] || null,
+              state: contact['Alamat Penuh (Negeri)'] || contact['Alamat Pejabat (Negeri)'] || null,
+              postcode: contact['Alamat Penuh (Poskod)'] || contact['Alamat Pejabat (Poskod)'] || null,
+              country: contact['Alamat Penuh (Negara)'] || contact['Alamat Pejabat (Negara)'] || null,
+              phoneIndex: 0,
+              companyName: contact['Nama Syarikat/Organisasi'] || null,
+              contactName: contact['Nama Penuh'] || contact['Nama Syarikat/Organisasi'],
+              email: contact['Emel'] || null,
+              ic: contact['No. Kad Pengenalan ( tanpa \'-\' )'] || null,
+              threadid: '',
+              last_message: null,
+              zakatData: [zakatData],
+              createdAt: Timestamp.now(),
+              updatedAt: Timestamp.now(),
+              createdBy: user.email,
+              updatedBy: user.email
+            };
+  
+            batch.set(contactRef, contactData);
+            console.log(`Added new contact: ${contactData.contactName} - ${phoneWithPlus}`);
+          }
         }
   
         batches.push(batch.commit());
@@ -2230,7 +2350,6 @@ const sendBlastMessage = async () => {
         const contactsRef = collection(firestore, `companies/${companyId}/contacts`);
         const snapshot = await getDocs(contactsRef);
         
-        // Log verification results
         console.log('Verification - Total contacts in Firestore:', snapshot.size);
         console.log('Verification - Recent contacts:');
         snapshot.docs.slice(-5).forEach(doc => {
@@ -2262,7 +2381,139 @@ const sendBlastMessage = async () => {
       setLoading(false);
     }
   };
+  const createZakatData = (row: any): ZakatData => {
+    const sourceUrl = row['Source Url'] || '';
+    const zakatData: ZakatData = {
+      // Initialize with required fields
+      type: 'Unknown', // Will be updated based on sourceUrl
 
+      paymentStatus: row['Payment Status'] || 'Processing',
+      paymentDate: row['Payment Date'] || null,
+      paymentAmount: parseFloat(row['Payment Amount']?.replace(/[^0-9.-]+/g, '')) || null,
+      transactionId: row['Transaction Id'] || null,
+      entryDate: row['Entry Date'] || null,
+      dateUpdated: row['Date Updated'] || null,
+      sourceUrl: sourceUrl,
+      total: parseFloat(row['Total']?.replace(/[^0-9.-]+/g, '')) || null,
+      productName: row['Product Name (Name)'] || null,
+      productPrice: row['Product Name (Price)']?.replace('&#82;&#77; ', '') || null,
+      productQuantity: row['Product Name (Quantity)'] || null,
+      consent: row['Consent (Consent)'] || null,
+      consentText: row['Consent (Text)'] || null,
+      consentDescription: row['Consent (Description)'] || null,
+      createdBy: row['Created By (User Id)'] || null,
+      entryId: row['Entry Id'] || null,
+      postId: row['Post Id'] || null,
+      userAgent: row['User Agent'] || null,
+      userIp: row['User IP'] || null,
+      timestamp: Timestamp.now(),
+      totalSavings: null,
+      businessProfit: null,
+      companyName: null,
+      ssmNumber: null,
+      orgPhone: null,
+      officerName: null,
+      officerPhone: null,
+      officeAddress: null,
+      silverValue: null,
+      monthlyIncome: null,
+      otherAnnualIncome: null,
+      monthlyZakat: null,
+      annualZakat: null,
+      paymentOption: null,
+      investmentTotal: null,
+      year: null,
+      epfAmount: null,
+      riceType: null,
+      dependents: null,
+      goldValue: null,
+      zakatAmount: null
+    };
+  
+    // Determine type and add specific fields based on source URL
+    if (sourceUrl.includes('zakat-simpanan')) {
+      zakatData.type = 'Simpanan';
+      zakatData.totalSavings = parseFloat(row['Jumlah Wang Simpanan']?.replace(/[^0-9.-]+/g, '')) || null;
+      zakatData.zakatAmount = parseFloat(row['Jumlah Zakat Simpanan Yang Perlu Ditunaikan']?.replace(/[^0-9.-]+/g, '')) || null;
+    } 
+    else if (sourceUrl.includes('zakat-perniagaan')) {
+      if (row['Nama Syarikat/Organisasi']) {
+        zakatData.type = 'PerniagaanOrganisasi';
+        zakatData.companyName = row['Nama Syarikat/Organisasi'];
+        zakatData.ssmNumber = row['No. SSM'];
+        zakatData.orgPhone = row['No Telefon Organisasi'];
+        zakatData.officerName = row['Nama Pegawai Untuk Dihubungi'];
+        zakatData.officerPhone = row['No. Telefon Pegawai'];
+        zakatData.officeAddress = {
+          street: row['Alamat Pejabat (Jalan)'] || '',
+          addressLine2: row['Alamat Pejabat (Address Line 2)'] || '',
+          city: row['Alamat Pejabat (Bandar)'] || '',
+          state: row['Alamat Pejabat (Negeri)'] || '',
+          postcode: row['Alamat Pejabat (Poskod)'] || '',
+          country: row['Alamat Pejabat (Negara)'] || ''
+        };
+      } else {
+        zakatData.type = 'PerniagaanIndividu';
+      }
+      zakatData.businessProfit = parseFloat(row['Untung Bersih Perniagaan']?.replace(/[^0-9.-]+/g, '')) || null;
+      zakatData.zakatAmount = parseFloat(row['Jumlah Zakat Perniagaan Yang Perlu Ditunaikan']?.replace(/[^0-9.-]+/g, '')) || null;
+    }
+    else if (sourceUrl.includes('zakat-perak')) {
+      zakatData.type = 'Perak';
+      zakatData.silverValue = parseFloat(row['Nilai Simpanan']?.replace(/[^0-9.-]+/g, '')) || null;
+      zakatData.zakatAmount = parseFloat(row['Jumlah Zakat Perak Yang Perlu Ditunaikan']?.replace(/[^0-9.-]+/g, '')) || null;
+    }
+    else if (sourceUrl.includes('zakat-pendapatan')) {
+      zakatData.type = 'Pendapatan';
+      zakatData.monthlyIncome = parseFloat(row['Pendapatan Bulanan']?.replace(/[^0-9.-]+/g, '')) || null;
+      zakatData.otherAnnualIncome = parseFloat(row['Lain-Lain Pendapatan Tahunan']?.replace(/[^0-9.-]+/g, '')) || null;
+      zakatData.monthlyZakat = parseFloat(row['Jumlah Zakat Bulanan']?.replace(/[^0-9.-]+/g, '')) || null;
+      zakatData.annualZakat = parseFloat(row['Jumlah Zakat Tahunan']?.replace(/[^0-9.-]+/g, '')) || null;
+      zakatData.paymentOption = row['Pilihan Bayaran'] || null;
+    }
+    else if (sourceUrl.includes('zakat-pelaburan')) {
+      zakatData.type = 'Pelaburan';
+      zakatData.investmentTotal = parseFloat(row['Modal Asal + Untung Bersih']?.replace(/[^0-9.-]+/g, '')) || null;
+      zakatData.zakatAmount = parseFloat(row['Jumlah Zakat Pelaburan Yang Perlu Ditunaikan']?.replace(/[^0-9.-]+/g, '')) || null;
+    }
+    else if (sourceUrl.includes('zakat-padi')) {
+      zakatData.type = 'Padi';
+      zakatData.year = row['Haul/Tahun'] || null;
+      zakatData.zakatAmount = parseFloat(row['Jumlah Zakat Padi Yang Hendak Ditunaikan']?.replace(/[^0-9.-]+/g, '')) || null;
+    }
+    else if (sourceUrl.includes('zakat-kwsp')) {
+      zakatData.type = 'KWSP';
+      zakatData.epfAmount = parseFloat(row['Jumlah Yang Dikeluarkan Daripada KWSP']?.replace(/[^0-9.-]+/g, '')) || null;
+      zakatData.zakatAmount = parseFloat(row['Jumlah Zakat KWSP Yang Perlu Ditunaikan']?.replace(/[^0-9.-]+/g, '')) || null;
+    }
+    else if (sourceUrl.includes('zakat-fitrah')) {
+      zakatData.type = 'Fitrah';
+      zakatData.riceType = row['Pilih Jenis Beras'] || null;
+      zakatData.dependents = parseInt(row['Jumlah Tanggungan (orang)']) || null;
+      zakatData.zakatAmount = parseFloat(row['Zakat Fitrah Yang Perlu Ditunaikan']?.replace(/[^0-9.-]+/g, '')) || null;
+    }
+    else if (sourceUrl.includes('zakat-emas')) {
+      zakatData.type = 'Emas';
+      zakatData.goldValue = parseFloat(row['Nilai Semasa Emas Yang Dimiliki']?.replace(/[^0-9.-]+/g, '')) || null;
+      zakatData.zakatAmount = parseFloat(row['Jumlah Zakat Emas Yang Perlu Ditunaikan']?.replace(/[^0-9.-]+/g, '')) || null;
+    }
+    else if (sourceUrl.includes('zakat-ternakan')) {
+      zakatData.type = 'Ternakan';
+      zakatData.year = row['Haul/Tahun'] || null;
+      zakatData.zakatAmount = parseFloat(row['Jumlah Zakat Qadha Yang Hendak Ditunaikan']?.replace(/[^0-9.-]+/g, '')) || null;
+    }
+    else if (sourceUrl.includes('qadha-zakat')) {
+      zakatData.type = 'Qadha';
+      zakatData.year = row['Haul/Tahun'] || null;
+      zakatData.zakatAmount = parseFloat(row['Jumlah Zakat Qadha Yang Hendak Ditunaikan']?.replace(/[^0-9.-]+/g, '')) || null;
+    }
+    else {
+      zakatData.type = 'Unknown';
+      console.warn(`Unknown zakat type for URL: ${sourceUrl}`);
+    }
+  
+    return zakatData;
+  };
   async function sendTextMessage(id: string, blastMessage: string, contact: Contact): Promise<void> {
     if (!blastMessage.trim()) {
       console.error('Blast message is empty');

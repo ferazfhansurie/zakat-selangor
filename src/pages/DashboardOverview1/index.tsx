@@ -20,7 +20,7 @@ import axios from 'axios';
 import { getFirebaseToken, messaging } from "../../firebaseconfig";
 import { getAuth } from "firebase/auth";
 import { initializeApp } from "firebase/app";
-import { DocumentData, DocumentReference, getDoc,where, query, limit,getDocs, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { DocumentData, DocumentReference, getDoc,where, query, limit,getDocs, onSnapshot, doc, updateDoc, Timestamp } from 'firebase/firestore';
 import { getFirestore, collection, setDoc, increment, serverTimestamp } from 'firebase/firestore';
 import { onMessage } from "firebase/messaging";
 import { useNavigate } from "react-router-dom";
@@ -171,6 +171,7 @@ function EmployeeSearch({
 function Main() {
 
   interface Contact {
+    ic: string | null;
     additionalEmails: string[];
     address1: string | null;
     assignedTo: string | null;
@@ -198,9 +199,77 @@ function Main() {
     tags: string[];
     type: string;
     website: string | null;
-  
+    zakatData?: ZakatData[];
   }
 
+  type ZakatType = 
+  | 'Simpanan' 
+  | 'PerniagaanOrganisasi' 
+  | 'PerniagaanIndividu' 
+  | 'Perak' 
+  | 'Pendapatan' 
+  | 'Pelaburan' 
+  | 'Padi' 
+  | 'KWSP' 
+  | 'Fitrah' 
+  | 'Emas' 
+  | 'Ternakan' 
+  | 'Qadha' 
+  | 'Unknown';
+
+  interface ZakatData {
+    type: ZakatType;
+    paymentStatus: string | null;
+    paymentDate: string | null;
+    paymentAmount: number | null;
+    transactionId: string | null;
+    entryDate: string | null;
+    dateUpdated: string | null;
+    sourceUrl: string | null;
+    total: number | null;
+    productName: string | null;
+    productPrice: string | null;
+    productQuantity: string | null;
+    consent: string | null;
+    consentText: string | null;
+    consentDescription: string | null;
+    createdBy: string | null;
+    entryId: string | null;
+    postId: string | null;
+    userAgent: string | null;
+    userIp: string | null;
+    timestamp: Timestamp | null;
+    
+    // Type-specific fields
+    totalSavings: number | null;
+    businessProfit: number | null;
+    companyName: string | null;
+    ssmNumber: string | null;
+    orgPhone: string | null;
+    officerName: string | null;
+    officerPhone: string | null;
+    officeAddress: {
+      street: string | null;
+      addressLine2: string | null;
+      city: string | null;
+      state: string | null;
+      postcode: string | null;
+      country: string | null;
+    } | null;
+    silverValue: number | null;
+    monthlyIncome: number | null;
+    otherAnnualIncome: number | null;
+    monthlyZakat: number | null;
+    annualZakat: number | null;
+    paymentOption: string | null;
+    investmentTotal: number | null;
+    year: string | null;
+    epfAmount: number | null;
+    riceType: string | null;
+    dependents: number | null;
+    goldValue: number | null;
+    zakatAmount: number | null;
+  }
   interface Employee {
     id: string;
     name: string;
@@ -270,7 +339,356 @@ interface Tag {
   useEffect(() => {
     fetchMonthlyTokens();
   }, []);
+  const [totalZakatAmount, setTotalZakatAmount] = useState<number>(0);
+  const [totalContributors, setTotalContributors] = useState<number>(0);
+  const [monthlyZakatAmount, setMonthlyZakatAmount] = useState<number>(0);
+  const [avgZakatAmount, setAvgZakatAmount] = useState<number>(0);
+  const [zakatTypeDistribution, setZakatTypeDistribution] = useState<ChartData<'doughnut'>>({
+    labels: [],
+    datasets: []
+  });
+  const [zakatTrends, setZakatTrends] = useState<ChartData<'line'>>({
+    labels: [],
+    datasets: []
+  });
+  const [timeFilter, setTimeFilter] = useState<'7days' | '1month' | '3months' | 'all'>('1month');
+  const [paidZakat, setPaidZakat] = useState<number>(0);
+  const [pendingZakat, setPendingZakat] = useState<number>(0);
+  const [failedZakat, setFailedZakat] = useState<number>(0);
+  const [collectionRate, setCollectionRate] = useState<number>(0);
+  const [topContributors, setTopContributors] = useState<Array<{
+    name: string;
+    totalAmount: number;
+    contributions: number;
+  }>>([]);
+  const [regionalDistribution, setRegionalDistribution] = useState<ChartData<'bar'>>({
+    labels: [],
+    datasets: []
+  });
+  // Add these functions after your state declarations
+const calculateZakatMetrics = async () => {
+  try {
+    const contactsRef = collection(firestore, `companies/${companyId}/contacts`);
+    const contactsSnapshot = await getDocs(contactsRef);
+    
+    let totalAmount = 0;
+    let monthlyAmount = 0;
+    let paidCount = 0;
+    let pendingCount = 0;
+    let failedCount = 0;
+    
+    // Initialize payment methods tracking
+    const paymentMethods: { [key: string]: { count: number; amount: number } } = {
+      'Tahunan': { count: 0, amount: 0 },
+      'Bulanan': { count: 0, amount: 0 },
+      'One-time': { count: 0, amount: 0 }
+    };
 
+    // Use Set to track unique contributors by IC
+    const uniqueContributors = new Set<string>();
+    
+    const currentDate = new Date();
+    const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+    
+    // Initialize type distribution
+    const typeDistribution: { [key in ZakatType]: number } = {
+      'Simpanan': 0,
+      'PerniagaanOrganisasi': 0,
+      'PerniagaanIndividu': 0,
+      'Perak': 0,
+      'Pendapatan': 0,
+      'Pelaburan': 0,
+      'Padi': 0,
+      'KWSP': 0,
+      'Fitrah': 0,
+      'Emas': 0,
+      'Ternakan': 0,
+      'Qadha': 0,
+      'Unknown': 0
+    };
+    
+    contactsSnapshot.forEach((doc) => {
+      const contactData = doc.data() as Contact;
+      
+      if (contactData.zakatData && contactData.zakatData.length > 0) {
+        // Add to unique contributors if they have IC
+        if (contactData.ic) {
+          uniqueContributors.add(contactData.ic);
+        }
+
+        contactData.zakatData.forEach((zakatEntry) => {
+          const amount = zakatEntry.zakatAmount || 0;
+          const paymentOption = zakatEntry.paymentOption || 'One-time';
+          
+          // Count by payment status
+          if (zakatEntry.paymentStatus === 'Paid') {
+            paidCount++;
+            totalAmount += amount;
+            
+            // Track payment method
+            if (!paymentMethods[paymentOption]) {
+              paymentMethods[paymentOption] = { count: 0, amount: 0 };
+            }
+            paymentMethods[paymentOption].count++;
+            paymentMethods[paymentOption].amount += amount;
+
+            // Track monthly amount
+            if (zakatEntry.paymentDate) {
+              const paymentDate = new Date(zakatEntry.paymentDate);
+              if (paymentDate >= firstDayOfMonth) {
+                monthlyAmount += amount;
+              }
+            }
+          } else if (zakatEntry.paymentStatus === 'Failed') {
+            failedCount++;
+          } else  if (zakatEntry.paymentStatus === 'Processing'){
+            pendingCount++;
+          }
+          
+          // Count zakat types
+          if (zakatEntry.type) {
+            typeDistribution[zakatEntry.type as ZakatType]++;
+          }
+        });
+      }
+    });
+
+    // Update states
+    setTotalZakatAmount(totalAmount);
+    setMonthlyZakatAmount(monthlyAmount);
+    setTotalContributors(paidCount + pendingCount + failedCount); // Changed this line
+    setAvgZakatAmount(uniqueContributors.size > 0 ? totalAmount / uniqueContributors.size : 0);
+    setPaidZakat(paidCount);
+    setPendingZakat(pendingCount);
+    setFailedZakat(failedCount);
+    setCollectionRate(paidCount + pendingCount + failedCount > 0 ? (paidCount / (paidCount + pendingCount + failedCount)) * 100 : 0);
+    
+    // Update payment method stats
+    setPaymentMethodStats(
+      Object.entries(paymentMethods)
+        .filter(([_, stats]) => stats.count > 0)
+        .map(([method, stats]) => ({
+          method,
+          count: stats.count,
+          amount: stats.amount
+        }))
+    );
+
+    // Update zakat type distribution
+    const activeTypes = Object.entries(typeDistribution)
+      .filter(([_, count]) => count > 0)
+      .sort((a, b) => b[1] - a[1]);
+
+    setZakatTypeDistribution({
+      labels: activeTypes.map(([type]) => type),
+      datasets: [{
+        data: activeTypes.map(([_, count]) => count),
+        backgroundColor: [
+          '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+          '#FF9F40', '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0',
+          '#9966FF', '#FF9F40', '#4BC0C0'
+        ]
+      }]
+    });
+
+  } catch (error) {
+    console.error('Error calculating zakat metrics:', error);
+  }
+};
+  const zakatTypeOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'right' as const,
+        labels: {
+          generateLabels: (chart: any) => {
+            const data = chart.data;
+            if (data.labels.length && data.datasets.length) {
+              return data.labels.map((label: string, index: number) => {
+                const count = data.datasets[0].data[index];
+                return {
+                  text: `${label} (${count})`,
+                  fillStyle: data.datasets[0].backgroundColor[index],
+                  hidden: false,
+                  lineCap: undefined,
+                  lineDash: undefined,
+                  lineDashOffset: undefined,
+                  lineJoin: undefined,
+                  lineWidth: undefined,
+                  strokeStyle: undefined,
+                  pointStyle: 'circle',
+                  rotation: undefined
+                };
+              });
+            }
+            return [];
+          }
+        }
+      }
+    }
+  };
+  const calculateZakatTrends = async () => {
+    try {
+      const contactsRef = collection(firestore, `companies/${companyId}/contacts`);
+      const contactsSnapshot = await getDocs(contactsRef);
+      
+      // Create a map to store daily totals
+      const dailyTotals = new Map<string, number>();
+      
+      // Determine date range based on timeFilter
+      const now = new Date();
+      let startDate = new Date();
+      switch (timeFilter) {
+        case '7days':
+          startDate.setDate(now.getDate() - 7);
+          break;
+        case '1month':
+          startDate.setMonth(now.getMonth() - 1);
+          break;
+        case '3months':
+          startDate.setMonth(now.getMonth() - 3);
+          break;
+        case 'all':
+          startDate = new Date(2020, 0, 1); // Or your preferred start date
+          break;
+      }
+  
+      // Initialize all dates in range with 0
+      for (let d = new Date(startDate); d <= now; d.setDate(d.getDate() + 1)) {
+        const dateKey = d.toISOString().split('T')[0];
+        dailyTotals.set(dateKey, 0);
+      }
+  
+      // Aggregate zakat amounts by date
+      contactsSnapshot.forEach((doc) => {
+        const contactData = doc.data() as Contact;
+        if (contactData.zakatData && contactData.zakatData.length > 0) {
+          contactData.zakatData.forEach((zakatEntry) => {
+            if (zakatEntry.paymentDate && zakatEntry.zakatAmount) {
+              const paymentDate = new Date(zakatEntry.paymentDate);
+              if (paymentDate >= startDate && paymentDate <= now) {
+                const dateKey = paymentDate.toISOString().split('T')[0];
+                const currentAmount = dailyTotals.get(dateKey) || 0;
+                dailyTotals.set(dateKey, currentAmount + zakatEntry.zakatAmount);
+              }
+            }
+          });
+        }
+      });
+  
+      // Convert to sorted arrays for chart
+      const sortedDates = Array.from(dailyTotals.keys()).sort();
+      const amounts = sortedDates.map(date => dailyTotals.get(date) || 0);
+  
+      // Format dates for display
+      const formattedDates = sortedDates.map(date => {
+        const d = new Date(date);
+        return d.toLocaleDateString('en-MY', {
+          month: 'short',
+          day: 'numeric'
+        });
+      });
+  
+      console.log('Zakat Trends Data:', {
+        dates: formattedDates,
+        amounts: amounts
+      });
+  
+      setZakatTrends({
+        labels: formattedDates,
+        datasets: [{
+          label: 'Daily Zakat Collection',
+          data: amounts,
+          borderColor: '#36A2EB',
+          backgroundColor: 'rgba(54, 162, 235, 0.1)',
+          tension: 0.1,
+          fill: true,
+          pointRadius: 3,
+          pointHoverRadius: 5
+        }]
+      });
+  
+    } catch (error) {
+      console.error('Error calculating zakat trends:', error);
+    }
+  };
+
+  const getTopContributors = async (limit: number = 10) => {
+    try {
+      const contactsRef = collection(firestore, `companies/${companyId}/contacts`);
+      const contactsSnapshot = await getDocs(contactsRef);
+      
+      const contributorData: Array<{
+        name: string;
+        totalAmount: number;
+        contributions: number;
+      }> = [];
+  
+      // Helper function to validate IC
+      const isValidIC = (ic: string): boolean => {
+        if (!ic) return false;
+        
+        // Malaysian IC format: YYMMDD-PB-XXXX
+        const icRegex = /^(\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])-?([0-9]{2})-?([0-9]{4})$/;
+        if (!icRegex.test(ic.replace(/-/g, ''))) return false;
+        
+        // Extract date components
+        const year = parseInt(ic.substring(0, 2));
+        const month = parseInt(ic.substring(2, 4));
+        const day = parseInt(ic.substring(4, 6));
+        
+        // Validate date
+        const currentYear = new Date().getFullYear() % 100;
+        const fullYear = year <= currentYear ? 2000 + year : 1900 + year;
+        const date = new Date(fullYear, month - 1, day);
+        
+        return date.getMonth() === month - 1 && date.getDate() === day;
+      };
+  
+      contactsSnapshot.forEach((doc) => {
+        const contactData = doc.data() as Contact;
+        
+        // Skip contacts without valid IC
+        if (!contactData.ic || !isValidIC(contactData.ic)) {
+          return;
+        }
+  
+        if (contactData.zakatData && contactData.zakatData.length > 0) {
+          const totalAmount = contactData.zakatData.reduce((sum, entry) => 
+            entry.paymentStatus?.toLowerCase() === 'paid' ? sum + (entry.zakatAmount || 0) : sum, 0);
+          
+          if (totalAmount > 0) {
+            contributorData.push({
+              name: contactData.contactName || 'Unknown',
+              totalAmount,
+              contributions: contactData.zakatData.filter(entry => 
+                entry.paymentStatus?.toLowerCase() === 'paid' && 
+                entry.zakatAmount && 
+                entry.zakatAmount > 0
+              ).length
+            });
+          }
+        }
+      });
+  
+      setTopContributors(
+        contributorData
+          .sort((a, b) => b.totalAmount - a.totalAmount)
+          .slice(0, limit)
+      );
+  
+    } catch (error) {
+      console.error('Error getting top contributors:', error);
+    }
+  };
+useEffect(() => {
+  if (companyId) {
+    calculateZakatMetrics();
+    calculateZakatTrends();
+    getTopContributors();
+  }
+}, [companyId, timeFilter]); // Add timeFilter as dependency
   const fetchMonthlyTokens = async () => {
     try {
       const auth = getAuth(app);
@@ -1129,112 +1547,550 @@ const getEarliestContactDate = async () => {
     } as const;
   }, []);
 
+  // Add these new interfaces and types
+  interface ZakatProfile {
+    ageGroup: string;
+    occupation: string;
+    income: number;
+    zakatHistory: number;
+    preferredPaymentMethod: string;
+  }
+
+  interface RegionalData {
+    state: string;
+    totalAmount: number;
+    contributors: number;
+    collectionRate: number;
+  }
+
+  // Add these new state variables
+  const [ageDistribution, setAgeDistribution] = useState<ChartData<'bar'>>({
+    labels: [],
+    datasets: []
+  });
+
+  const [occupationDistribution, setOccupationDistribution] = useState<ChartData<'pie'>>({
+    labels: [],
+    datasets: []
+  });
+
+  const [seasonalTrends, setSeasonalTrends] = useState<ChartData<'line'>>({
+    labels: [],
+    datasets: []
+  });
+
+  const [paymentMethodStats, setPaymentMethodStats] = useState<{
+    method: string;
+    count: number;
+    amount: number;
+  }[]>([]);
+
+  const [regionalStats, setRegionalStats] = useState<RegionalData[]>([]);
+
+
+  // Modify the calculateProfileMetrics function
+  const calculateProfileMetrics = async () => {
+    try {
+      const contactsRef = collection(firestore, `companies/${companyId}/contacts`);
+      const contactsSnapshot = await getDocs(contactsRef);
+      
+      const ageGroups: { [key: string]: number } = {
+        '18-25': 0, '26-35': 0, '36-45': 0, '46-55': 0, '55+': 0
+      };
+      
+      const occupations: { [key: string]: number } = {};
+      const paymentMethods: { [key: string]: { count: number; amount: number } } = {};
+      const regions: { [key: string]: RegionalData } = {};
+  
+      let totalPayments = 0;
+      let totalContributors = 0;
+  
+      contactsSnapshot.forEach((doc) => {
+        const contactData = doc.data() as Contact;
+        if (contactData.zakatData && contactData.zakatData.length > 0) {
+          // Extract IC number and calculate age
+          const icNumber = contactData.ic;
+          if (icNumber) {
+            const birthDate = getBirthDateFromIC(icNumber);
+            if (birthDate) {
+              const age = calculateAge(birthDate);
+              const ageGroup = getAgeGroup(age);
+              ageGroups[ageGroup]++;
+            }
+          }
+  
+          // Track unique contributors
+          totalContributors++;
+  
+          // Process each zakat entry
+          contactData.zakatData.forEach(entry => {
+            if (entry.paymentStatus === 'Paid') {
+              totalPayments++;
+              
+              // Payment method statistics
+              if (entry.paymentOption) {
+                const normalizedPaymentOption = entry.paymentOption.trim();
+                if (!paymentMethods[normalizedPaymentOption]) {
+                  paymentMethods[normalizedPaymentOption] = { count: 0, amount: 0 };
+                }
+                paymentMethods[normalizedPaymentOption].count++;
+                paymentMethods[normalizedPaymentOption].amount += entry.zakatAmount || 0;
+              }
+  
+              // Regional statistics with normalization
+              if (contactData.state) {
+                const normalizedState = contactData.state.trim().toUpperCase();
+                if (!regions[normalizedState]) {
+                  regions[normalizedState] = {
+                    state: contactData.state, // Keep original formatting
+                    totalAmount: 0,
+                    contributors: 0,
+                    collectionRate: 0
+                  };
+                }
+                regions[normalizedState].totalAmount += entry.zakatAmount || 0;
+                regions[normalizedState].contributors++;
+              }
+            }
+          });
+        }
+      });
+  
+      // Calculate collection rates for regions
+      Object.values(regions).forEach(region => {
+        region.collectionRate = (region.contributors / totalContributors) * 100;
+      });
+  
+      // Update age distribution chart
+      setAgeDistribution({
+        labels: Object.keys(ageGroups),
+        datasets: [{
+          label: 'Contributors by Age Group',
+          data: Object.values(ageGroups),
+          backgroundColor: [
+            'rgba(54, 162, 235, 0.6)',
+            'rgba(75, 192, 192, 0.6)',
+            'rgba(255, 206, 86, 0.6)',
+            'rgba(255, 99, 132, 0.6)',
+            'rgba(153, 102, 255, 0.6)'
+          ]
+        }]
+      });
+  
+      // Update payment methods stats
+      const sortedPaymentMethods = Object.entries(paymentMethods)
+        .map(([method, stats]) => ({
+          method,
+          count: stats.count,
+          amount: stats.amount
+        }))
+        .sort((a, b) => b.amount - a.amount); // Sort by amount in descending order
+  
+      setPaymentMethodStats(sortedPaymentMethods);
+  
+      // Filter and sort regional stats
+      const filteredRegions = Object.values(regions)
+      .filter(region => {
+        const averageAmount = region.totalAmount / region.contributors;
+        // Remove regions with 0 contributors or 0 average amount
+        return region.contributors > 0 && averageAmount > 0;
+      })
+      .sort((a, b) => b.totalAmount - a.totalAmount)
+      .map(region => ({
+        ...region,
+        averageAmount: region.totalAmount / region.contributors
+      }));
+  
+      setRegionalStats(filteredRegions);
+  
+      // Log summary for debugging
+      console.log('Profile Metrics Summary:', {
+        totalContributors,
+        totalPayments,
+        regionsCount: filteredRegions.length,
+        paymentMethodsCount: sortedPaymentMethods.length,
+        ageGroups
+      });
+  
+    } catch (error) {
+      console.error('Error calculating profile metrics:', error);
+      // Optionally set an error state here
+    }
+  };
+
+  // Improved getBirthDateFromIC function with better validation
+  const getBirthDateFromIC = (ic: string): Date | null => {
+    try {
+      // Extract the first 6 digits (YYMMDD)
+      const birthDateStr = ic.substring(0, 6);
+      
+      const year = parseInt(birthDateStr.substring(0, 2));
+      const month = parseInt(birthDateStr.substring(2, 4)) - 1; // JS months are 0-based
+      const day = parseInt(birthDateStr.substring(4, 6));
+      
+      // Determine century
+      const currentYear = new Date().getFullYear();
+      const currentCentury = Math.floor(currentYear / 100) * 100;
+      const fullYear = year + (year + currentCentury > currentYear ? currentCentury - 100 : currentCentury);
+      
+      const date = new Date(fullYear, month, day);
+      
+      // Validate the date is real and not in the future
+      if (date.getTime() > new Date().getTime()) {
+        console.warn(`Invalid birth date (future date) from IC: ${ic.substring(0, 6)}XXXXXX`);
+        return null;
+      }
+      
+      // Validate the date components match what we parsed
+      if (date.getDate() !== day || date.getMonth() !== month || date.getFullYear() !== fullYear) {
+        console.warn(`Invalid date components from IC: ${ic.substring(0, 6)}XXXXXX`);
+        return null;
+      }
+      
+      return date;
+    } catch (error) {
+      console.error(`Error parsing birth date from IC: ${ic.substring(0, 6)}XXXXXX`, error);
+      return null;
+    }
+  };
+
+  // Helper function to calculate age
+  const calculateAge = (birthDate: Date): number => {
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    
+    return age;
+  };
+
+  // Helper function to determine age group
+  const getAgeGroup = (age: number): string => {
+    if (age < 26) return '18-25';
+    if (age < 36) return '26-35';
+    if (age < 46) return '36-45';
+    if (age < 56) return '46-55';
+    return '55+';
+  };
+
+  // Update useEffect to include new calculations
+  useEffect(() => {
+    if (companyId) {
+      calculateZakatMetrics();
+      calculateZakatTrends();
+      calculateProfileMetrics();
+      getTopContributors();
+    }
+  }, [companyId, timeFilter]);
+
   const dashboardCards = [
     {
-      id: 'kpi',
-      title: 'Key Performance Indicators',
+      id: 'zakat-overview',
+      title: 'Zakat Collection Overview',
       content: [
-        { icon: "Contact", label: "Total Contacts", value: totalContacts },
-        { icon: "MessageCircleReply", label: "Number Replies", value: numReplies },
-        { icon: "Check", label: "Closed Contacts", value: closedContacts },
-        { icon: "Mail", label: "Open Contacts", value: openContacts },
+        { 
+          icon: "DollarSign", 
+          label: "Total Zakat Amount", 
+          value: totalZakatAmount.toLocaleString('en-MY', { style: 'currency', currency: 'MYR' })
+        },
+        { 
+          icon: "Users", 
+          label: "Total Contributors", 
+          value: totalContributors 
+        },
+        { 
+          icon: "Calendar", 
+          label: "This Month Collections", 
+          value: monthlyZakatAmount.toLocaleString('en-MY', { style: 'currency', currency: 'MYR' })
+        },
+        { 
+          icon: "TrendingUp", 
+          label: "Average Zakat Amount", 
+          value: avgZakatAmount.toLocaleString('en-MY', { style: 'currency', currency: 'MYR' })
+        },
       ]
     },
     {
-      id: 'engagement-metrics',
-      title: 'Engagement Metrics',
+      id: 'payment-status',
+      title: 'Payment Status Overview',
       content: [
-        { label: "Response Rate", value: `${responseRate}%` },
-        { label: "Book Appointments Rate", value: `${averageRepliesPerLead}%` },
-        { label: "Engagement Score", value: engagementScore },
-        { label: "Conversion Rate", value: `${closedContacts > 0 ? ((closedContacts / totalContacts) * 100).toFixed(2) : 0}%` },
-      ],
-    },
-    // {
-    //   id: 'leads',
-    //   title: 'Leads Overview',
-    //   content: [
-    //     { label: "Total", value: totalContacts },
-    //     { label: "Today", value: todayContacts },
-    //     { label: "This Week", value: weekContacts },
-    //     { label: "This Month", value: monthContacts },
-    //   ]
-    // },
-    {
-      id: 'contacts-over-time',
-      title: 'Contacts Over Time',
-      content: totalContactsChartData,
-      filter: contactsTimeFilter,
-      setFilter: setContactsTimeFilter
-    },
-    {
-      id: 'employee-assignments',
-      title: 'Employee Metrics',
-      content: { 
-        employees, 
-        filteredEmployees, 
-        chartData, 
-        lineChartOptions, 
-        currentUser, 
-        selectedEmployee, 
-        handleEmployeeSelect,
-        closedContactsChartData,
-        closedContactsChartOptions
-      }
+        { 
+          icon: "CheckCircle",
+          label: "Paid", 
+          value: paidZakat,
+          color: "text-green-500"
+        },
+        { 
+          icon: "Clock",
+          label: "Processing", 
+          value: pendingZakat,
+          color: "text-yellow-500"
+        },
+        { 
+          icon: "XCircle",
+          label: "Failed", 
+          value: failedZakat,
+          color: "text-red-500"
+        },
+        { 
+          icon: "Percent",
+          label: "Collection Rate", 
+          value: `${collectionRate.toFixed(1)}%`,
+          color: "text-blue-500"
+        },
+      ]
     },
     {
-      id: 'monthly-spend',
-      title: 'Monthly Spend',
+      id: 'zakat-trends',
+      title: 'Zakat Collection Trends',
       content: (
-        <div className="h-full flex flex-col">
-          {monthlySpendData.labels.length > 0 ? (
+        <div className="h-full">
+          <div className="mb-4">
+            <FormSelect
+              value={timeFilter}
+              onChange={(e) => setTimeFilter(e.target.value as typeof timeFilter)}
+              className="w-40"
+            >
+              <option value="7days">Last 7 Days</option>
+              <option value="1month">Last Month</option>
+              <option value="3months">Last 3 Months</option>
+              <option value="all">All Time</option>
+            </FormSelect>
+          </div>
+          <div className="h-[300px]">
+            <Line data={zakatTrends} options={{
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: {
+                  position: 'top',
+                },
+                title: {
+                  display: true,
+                  text: 'Daily Zakat Collections'
+                }
+              }
+            }} />
+          </div>
+        </div>
+      )
+    },
+    {
+      id: 'zakat-types',
+      title: 'Zakat Types Distribution',
+      content: (
+        <div className="h-[300px]">
+          <Doughnut 
+            data={zakatTypeDistribution}
+            options={{
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: {
+                  position: 'right',
+                  labels: {
+                    boxWidth: 12
+                  }
+                }
+              }
+            }}
+          />
+        </div>
+      )
+    },
+    {
+      id: 'top-contributors',
+      title: 'Top Contributors',
+      content: (
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Name
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Total Amount
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Contributions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {topContributors.map((contributor, index) => (
+                <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {contributor.name}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {contributor.totalAmount.toLocaleString('en-MY', { 
+                      style: 'currency', 
+                      currency: 'MYR' 
+                    })}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {contributor.contributions}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+     
+    )
+    },
+    {
+      id: 'contributor-demographics',
+      title: 'Contributor Demographics',
+      content: (
+        <div className="flex flex-col h-full">
+          <div className="mb-4">
+            <h4 className="text-sm font-medium text-gray-500">Age Distribution</h4>
+          </div>
+          <div className="h-[300px]">
             <Bar 
-              data={monthlySpendData} 
-              options={{ 
-                responsive: true, 
+              data={ageDistribution}
+              options={{
+                responsive: true,
                 maintainAspectRatio: false,
+                plugins: {
+                  legend: {
+                    display: false
+                  },
+                  tooltip: {
+                    callbacks: {
+                      label: (context) => {
+                        return `Contributors: ${context.raw}`;
+                      }
+                    }
+                  }
+                },
                 scales: {
                   y: {
                     beginAtZero: true,
                     title: {
                       display: true,
-                      text: 'Price (MYR)',
-                    },
+                      text: 'Number of Contributors'
+                    }
+                  }
+                }
+              }}
+            />
+          </div>
+        </div>
+      )
+    },
+   
+    {
+      id: 'regional-analysis',
+      title: 'Regional Collection Analysis',
+      content: (
+        <div className="flex flex-col h-full">
+          <div className="mb-4 flex justify-between items-center">
+            <h4 className="text-sm font-medium text-gray-500">Collection by Region</h4>
+          </div>
+          <div className="h-[300px]">
+            <Bar 
+              data={{
+                labels: regionalStats.map(r => r.state),
+                datasets: [
+                  {
+                    label: 'Total Amount',
+                    data: regionalStats.map(r => r.totalAmount),
+                    backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                    yAxisID: 'y'
                   },
-                  x: {
+                  {
+                    label: 'Contributors',
+                    data: regionalStats.map(r => r.contributors),
+                    backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                    yAxisID: 'y1'
+                  }
+                ]
+              }}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: {
+                    position: 'top'
+                  },
+                  tooltip: {
+                    callbacks: {
+                      label: (context) => {
+                        const datasetLabel = context.dataset.label;
+                        const value = context.raw as number;
+                        if (datasetLabel === 'Total Amount') {
+                          return `${datasetLabel}: ${value.toLocaleString('en-MY', { style: 'currency', currency: 'MYR' })}`;
+                        }
+                        return `${datasetLabel}: ${value}`;
+                      }
+                    }
+                  }
+                },
+                scales: {
+                  y: {
+                    type: 'linear',
+                    position: 'left',
                     title: {
                       display: true,
-                      text: 'Month',
-                    },
+                      text: 'Total Amount (MYR)'
+                    }
                   },
-                },
-              }} 
+                  y1: {
+                    type: 'linear',
+                    position: 'right',
+                    title: {
+                      display: true,
+                      text: 'Number of Contributors'
+                    },
+                    grid: {
+                      drawOnChartArea: false
+                    }
+                  }
+                }
+              }}
             />
-          ) : (
-            <p className="text-center text-gray-600 dark:text-gray-400">No data available</p>
-          )}
-         <div className="mt-4">
-      {monthlySpendData.labels.length > 0 && (
-        <>
-          <p className="text-sm text-gray-600 dark:text-gray-400">This Month's Tokens:</p>
-          <p className="text-lg font-semibold text-gray-800 dark:text-gray-200">
-            {Math.round(monthlySpendData.datasets[0].data[monthlySpendData.datasets[0].data.length - 1] / 0.003 * 1000).toLocaleString()}
-          </p>
-          <p className="text-sm text-gray-600 dark:text-gray-400">This Month's Price:</p>
-          <p className="text-lg font-semibold text-gray-800 dark:text-gray-200">
-            ${monthlySpendData.datasets[0].data[monthlySpendData.datasets[0].data.length - 1].toFixed(2)}
-          </p>
-          <p className="text-sm text-gray-600 dark:text-gray-400">Calculation:</p>
-          <p className="text-md text-gray-700 dark:text-gray-300">
-            ({Math.round(monthlySpendData.datasets[0].data[monthlySpendData.datasets[0].data.length - 1] / 0.003 * 1000).toLocaleString()} tokens / 1000) * $0.003 per 1k tokens
-          </p>
-        </>
-      )}
-    </div>
+          </div>
+          <div className="mt-4">
+            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead className="bg-gray-50 dark:bg-gray-800">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    State
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Collection Rate
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Avg. per Contributor
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-900 dark:divide-gray-700">
+                {regionalStats.map((region, index) => (
+                  <tr key={index} className={index % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800'}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                      {region.state}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                      {region.collectionRate.toFixed(1)}%
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                      {(region.totalAmount / region.contributors).toLocaleString('en-MY', { style: 'currency', currency: 'MYR' })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )
     }
-    // Add more cards here as needed
   ];
 
   return (
@@ -1249,13 +2105,12 @@ const getEarliestContactDate = async () => {
               <div className="p-6 flex-grow flex flex-col">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-200">{card.title}</h3>
-                  {card.id === 'contacts-over-time' && (
+                  {card.id === 'zakat-trends' && (
                     <FormSelect
+                      value={timeFilter}
+                      onChange={(e) => setTimeFilter(e.target.value as typeof timeFilter)}
                       className="w-40"
-                      value={card.filter}
-                      onChange={(e) => card.setFilter?.(e.target.value as 'today' | '7days' | '1month' | '3months' | 'all')}
                     >
-                      <option value="today">Today</option>
                       <option value="7days">Last 7 Days</option>
                       <option value="1month">Last Month</option>
                       <option value="3months">Last 3 Months</option>
@@ -1264,96 +2119,273 @@ const getEarliestContactDate = async () => {
                   )}
                 </div>
                 <div className="flex-grow">
-                  {card.id === 'kpi' || card.id === 'leads' || card.id === 'engagement-metrics' ? (
+                  {(card.id === 'zakat-overview' || card.id === 'payment-status') ? (
                     <div className="grid grid-cols-2 gap-4">
                       {Array.isArray(card.content) && card.content.map((item, index) => (
-                        <div key={index} className="text-center">
-                          <div className="text-3xl font-bold text-blue-500 dark:text-blue-400">
+                        <div key={index} className="text-center p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                          <div className="flex justify-center mb-2">
+                            {item.icon && (
+                              <span className={`text-2xl ${('color' in item) ? item.color : 'text-blue-500'}`}>
+                                <i className={`feather icon-${item.icon.toLowerCase()}`}></i>
+                              </span>
+                            )}
+                          </div>
+                          <div className={`text-2xl font-bold ${('color' in item) ? item.color : 'text-blue-500'} dark:text-blue-400`}>
                             {!loading ? item.value : <LoadingIcon icon="spinning-circles" className="w-8 h-8 mx-auto" />}
                           </div>
                           <div className="mt-1 text-sm text-gray-600 dark:text-gray-400">{item.label}</div>
                         </div>
                       ))}
                     </div>
-                  ) : card.id === 'contacts-over-time' ? (
-                    <div className="h-full">
-                      {('datasets' in card.content) && (
-                        <Line data={card.content} options={totalContactsChartOptions} />
-                      )}
+                  ) : card.id === 'zakat-trends' ? (
+                    <div className="h-[300px]">
+                      <Line 
+                        data={zakatTrends} 
+                        options={{
+                          responsive: true,
+                          maintainAspectRatio: false,
+                          plugins: {
+                            legend: {
+                              position: 'top',
+                            },
+                            title: {
+                              display: true,
+                              text: 'Daily Zakat Collections'
+                            }
+                          },
+                          scales: {
+                            y: {
+                              beginAtZero: true,
+                              title: {
+                                display: true,
+                                text: 'Amount (MYR)',
+                              }
+                            }
+                          }
+                        }} 
+                      />
                     </div>
-                  ) : card.id === 'employee-assignments' ? (
-                    <div>
+                  ) : card.id === 'zakat-types' ? (
+                    <div className="h-[300px]">
+                      <Doughnut 
+                        data={zakatTypeDistribution}
+                         options={zakatTypeOptions}
+                      />
+                    </div>
+                  ) : card.id === 'top-contributors' ? (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                        <thead className="bg-gray-50 dark:bg-gray-700">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                              Name
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                              Total Amount
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                              Contributions
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
+                          {topContributors.map((contributor, index) => (
+                            <tr key={index} className={index % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-700'}>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                                {contributor.name}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                                {contributor.totalAmount.toLocaleString('en-MY', { 
+                                  style: 'currency', 
+                                  currency: 'MYR' 
+                                })}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                                {contributor.contributions}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : card.id === 'contributor-demographics' ? (
+                    <div className="flex flex-col h-full">
                       <div className="mb-4">
-                        <EmployeeSearch 
-                          employees={employees}
-                          onSelect={(employee: { id: string; name: string; assignedContacts?: number | undefined; }) => handleEmployeeSelect(employee as Employee)}
-                          currentUser={currentUser}
-                        />
+                        <h4 className="text-sm font-medium text-gray-500">Age Distribution</h4>
                       </div>
-                      <div className="h-64">
-                        {selectedEmployee ? (
-                          chartData ? (
-                            <Line data={chartData} options={lineChartOptions} />
-                          ) : (
-                            <div className="text-center text-gray-600 dark:text-gray-400">No data available for this employee</div>
-                          )
-                        ) : (
-                          <div className="text-center text-gray-600 dark:text-gray-400">Select an employee to view their chart</div>
-                        )}
-                      </div>
-                    </div>
-                  ) :  card.id === 'monthly-spend' ? (
-                    <div>
-                    <div className="mb-4">
-                      {/* You can add any controls or filters here if needed */}
-                    </div>
-                    <div className="h-64">
-                      {monthlySpendData.labels.length > 0 ? (
+                      <div className="h-[300px]">
                         <Bar 
-                          data={monthlySpendData} 
-                          options={{ 
-                            responsive: true, 
+                          data={ageDistribution}
+                          options={{
+                            responsive: true,
                             maintainAspectRatio: false,
+                            plugins: {
+                              legend: {
+                                display: false
+                              },
+                              tooltip: {
+                                callbacks: {
+                                  label: (context) => {
+                                    return `Contributors: ${context.raw}`;
+                                  }
+                                }
+                              }
+                            },
                             scales: {
                               y: {
                                 beginAtZero: true,
                                 title: {
                                   display: true,
-                                  text: 'Price (MYR)',
-                                },
+                                  text: 'Number of Contributors'
+                                }
+                              }
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ) : card.id === 'payment-methods' ? (
+                    <div className="flex flex-col h-full">
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                          <thead className="bg-gray-50 dark:bg-gray-800">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                Method
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                Usage
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                Total Amount
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                Avg. Amount
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-900 dark:divide-gray-700">
+                            {paymentMethodStats.map((stat, index) => (
+                              <tr key={index} className={index % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800'}>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                                  {stat.method}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                                  {stat.count} ({((stat.count / paymentMethodStats.reduce((acc, curr) => acc + curr.count, 0)) * 100).toFixed(1)}%)
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                                  {stat.amount.toLocaleString('en-MY', { style: 'currency', currency: 'MYR' })}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                                  {(stat.amount / stat.count).toLocaleString('en-MY', { style: 'currency', currency: 'MYR' })}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : card.id === 'regional-analysis' ? (
+                    <div className="flex flex-col h-full">
+                      <div className="mb-4 flex justify-between items-center">
+                        <h4 className="text-sm font-medium text-gray-500">Collection by Region</h4>
+                      </div>
+                      <div className="h-[300px]">
+                        <Bar 
+                          data={{
+                            labels: regionalStats.map(r => r.state),
+                            datasets: [
+                              {
+                                label: 'Total Amount',
+                                data: regionalStats.map(r => r.totalAmount),
+                                backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                                yAxisID: 'y'
                               },
-                              x: {
+                              {
+                                label: 'Contributors',
+                                data: regionalStats.map(r => r.contributors),
+                                backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                                yAxisID: 'y1'
+                              }
+                            ]
+                          }}
+                          options={{
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                              legend: {
+                                position: 'top'
+                              },
+                              tooltip: {
+                                callbacks: {
+                                  label: (context) => {
+                                    const datasetLabel = context.dataset.label;
+                                    const value = context.raw as number;
+                                    if (datasetLabel === 'Total Amount') {
+                                      return `${datasetLabel}: ${value.toLocaleString('en-MY', { style: 'currency', currency: 'MYR' })}`;
+                                    }
+                                    return `${datasetLabel}: ${value}`;
+                                  }
+                                }
+                              }
+                            },
+                            scales: {
+                              y: {
+                                type: 'linear',
+                                position: 'left',
                                 title: {
                                   display: true,
-                                  text: 'Month',
-                                },
+                                  text: 'Total Amount (MYR)'
+                                }
                               },
-                            },
-                          }} 
+                              y1: {
+                                type: 'linear',
+                                position: 'right',
+                                title: {
+                                  display: true,
+                                  text: 'Number of Contributors'
+                                },
+                                grid: {
+                                  drawOnChartArea: false
+                                }
+                              }
+                            }
+                          }}
                         />
-                      ) : (
-                        <div className="text-center text-gray-600 dark:text-gray-400">No monthly spend data available</div>
-                      )}
+                      </div>
+                      <div className="mt-4">
+                        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                          <thead className="bg-gray-50 dark:bg-gray-800">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                State
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                Collection Rate
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                Avg. per Contributor
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-900 dark:divide-gray-700">
+                            {regionalStats.map((region, index) => (
+                              <tr key={index} className={index % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800'}>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                                  {region.state}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                                  {region.collectionRate.toFixed(1)}%
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                                  {(region.totalAmount / region.contributors).toLocaleString('en-MY', { style: 'currency', currency: 'MYR' })}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
-                    <div className="mt-4">
-      {monthlySpendData.labels.length > 0 && (
-        <>
-          <p className="text-sm text-gray-600 dark:text-gray-400">This Month's Tokens:</p>
-          <p className="text-lg font-semibold text-gray-800 dark:text-gray-200">
-            {Math.round(monthlySpendData.datasets[0].data[monthlySpendData.datasets[0].data.length - 1] / 0.003 * 1000).toLocaleString()}
-          </p>
-          <p className="text-sm text-gray-600 dark:text-gray-400">This Month's Price:</p>
-          <p className="text-lg font-semibold text-gray-800 dark:text-gray-200">
-            RM {monthlySpendData.datasets[0].data[monthlySpendData.datasets[0].data.length - 1].toFixed(2)}
-          </p>
-          <p className="text-sm text-gray-600 dark:text-gray-400">Calculation:</p>
-          <p className="text-md text-gray-700 dark:text-gray-300">
-            ({Math.round(monthlySpendData.datasets[0].data[monthlySpendData.datasets[0].data.length - 1] / 0.003 * 1000).toLocaleString()} tokens / 1000) * $0.003 per 1k tokens
-          </p>
-        </>
-      )}
-    </div>
-                  </div>
                   ) : (
                     <div className="text-center text-gray-600 dark:text-gray-400">No data available</div>
                   )}
