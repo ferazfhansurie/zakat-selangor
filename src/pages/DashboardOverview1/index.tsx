@@ -32,6 +32,8 @@ import { BarChart } from "lucide-react";
 import { useContacts } from "@/contact";
 import { User, ChevronRight } from 'lucide-react';
 import { format, subDays, subMonths, startOfDay, endOfDay, eachHourOfInterval, eachDayOfInterval } from 'date-fns';
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
 
 // Register ChartJS components

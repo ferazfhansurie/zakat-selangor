@@ -463,8 +463,8 @@ function Main() {
                   selected={startDate}
                   onChange={(date) => setStartDate(date)}
                   selectsStart
-                  startDate={startDate}
-                  endDate={endDate}
+                  startDate={startDate ? startDate : undefined}
+                  endDate={endDate ? endDate : undefined}
                   placeholderText="Start Date"
                   className="relative w-full h-[40px] pr-10 !box text-lg"
                 />
@@ -472,9 +472,9 @@ function Main() {
                   selected={endDate}
                   onChange={(date) => setEndDate(date)}
                   selectsEnd
-                  startDate={startDate}
-                  endDate={endDate}
-                  minDate={startDate}
+                  startDate={startDate ? startDate : undefined}
+                  endDate={endDate ? endDate : undefined}
+                  minDate={startDate ? startDate : undefined}
                   placeholderText="End Date"
                   className="relative w-full h-[40px] pr-10 !box text-lg"
                 />

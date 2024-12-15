@@ -641,7 +641,7 @@ const Main = () => {
               <div className="flex space-x-4 justify-center items-center mb-4">
                 <DatePicker
                   selected={dateRange[0]}
-                  onChange={(date: Date) => setDateRange([date, dateRange[1]])}
+                  onChange={(date: Date | null) => date && setDateRange([date, dateRange[1]])}
                   selectsStart
                   startDate={dateRange[0]}
                   endDate={dateRange[1]}
@@ -649,7 +649,7 @@ const Main = () => {
                 />
                 <DatePicker
                   selected={dateRange[1]}
-                  onChange={(date: Date) => setDateRange([dateRange[0], date])}
+                  onChange={(date: Date | null) => date && setDateRange([dateRange[0], date])}
                   selectsEnd
                   startDate={dateRange[0]}
                   endDate={dateRange[1]}

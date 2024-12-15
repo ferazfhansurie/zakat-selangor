@@ -48,7 +48,7 @@ function Main() {
                   <Preview>
                     <Litepicker
                       value={date}
-                      onChange={setDate}
+                      onChange={(date: string) => setDate(date)}
                       options={{
                         autoApply: false,
                         showWeekNumbers: true,
@@ -67,7 +67,7 @@ function Main() {
                       {`
               <Litepicker
                 value={date}
-                onChange={setDate}
+                onChange={(date: Date | null) => date && setDate(date)}
                 options={{
                   autoApply: false,
                   showWeekNumbers: true,
@@ -114,7 +114,7 @@ function Main() {
                       </div>
                       <Litepicker
                         value={date}
-                        onChange={setDate}
+                        onChange={(date: string) => setDate(date)}
                         options={{
                           autoApply: false,
                           showWeekNumbers: true,
@@ -138,7 +138,7 @@ function Main() {
                 </div>
                 <Litepicker
                   value={date}
-                  onChange={setDate}
+                  onChange={(date: Date | null) => date && setDate(date)}
                   options={{
                     autoApply: false,
                     showWeekNumbers: true,
@@ -319,7 +319,7 @@ function Main() {
                             <Litepicker
                               id="modal-datepicker-1"
                               value={date}
-                              onChange={setDate}
+                              onChange={(date: string) => date && setDate(date)}
                               options={{
                                 autoApply: false,
                                 showWeekNumbers: true,
@@ -339,7 +339,7 @@ function Main() {
                             <Litepicker
                               id="modal-datepicker-2"
                               value={date}
-                              onChange={setDate}
+                              onChange={(date: string) => date && setDate(date)}
                               options={{
                                 autoApply: false,
                                 showWeekNumbers: true,
@@ -450,7 +450,7 @@ function Main() {
                       <Litepicker
                         id="modal-datepicker-1"
                         value={date}
-                        onChange={setDate}
+                        onChange={(date: Date | null) => date && setDate(date)}
                         options={{
                           autoApply: false,
                           showWeekNumbers: true,
@@ -472,7 +472,7 @@ function Main() {
                       <Litepicker
                         id="modal-datepicker-2"
                         value={date}
-                        onChange={setDate}
+                        onChange={(date: Date | null) => date && setDate(date)}
                         options={{
                           autoApply: false,
                           showWeekNumbers: true,

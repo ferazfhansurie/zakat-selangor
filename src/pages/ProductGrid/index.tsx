@@ -519,14 +519,14 @@ const [submittedOrders, setSubmittedOrders] = useState<Order[]>([]);
             <div className="flex space-x-2">
               <DatePicker
                 selected={newOrder.madeDate ? new Date(newOrder.madeDate) : null}
-                onChange={(date: Date) => handleDateChange('madeDate', date)}
+                onChange={(date: Date | null) => handleDateChange('madeDate', date)}
                 dateFormat="dd/MM/yyyy"
                 placeholderText="Made Date"
                 className="border p-2 rounded"
               />
               <DatePicker
                 selected={newOrder.requiredDate ? new Date(newOrder.requiredDate) : null}
-                onChange={(date: Date) => handleDateChange('requiredDate', date)}
+                onChange={(date: Date | null) => handleDateChange('requiredDate', date)}
                 dateFormat="dd/MM/yyyy"
                 placeholderText="Required Date"
                 className="border p-2 rounded"
@@ -760,8 +760,8 @@ const [submittedOrders, setSubmittedOrders] = useState<Order[]>([]);
     selected={dateRange[0]}
     onChange={(date: Date | null) => setDateRange([date, dateRange[1]])}
     selectsStart
-    startDate={dateRange[0]}
-    endDate={dateRange[1]}
+    startDate={dateRange[0] || undefined}
+    endDate={dateRange[1] || undefined}
     isClearable
     placeholderText="Start Date"
     className="bg-white rounded"
@@ -770,9 +770,9 @@ const [submittedOrders, setSubmittedOrders] = useState<Order[]>([]);
     selected={dateRange[1]}
     onChange={(date: Date | null) => setDateRange([dateRange[0], date])}
     selectsEnd
-    startDate={dateRange[0]}
-    endDate={dateRange[1]}
-    minDate={dateRange[0]}
+    startDate={dateRange[0] || undefined}
+    endDate={dateRange[1] || undefined}
+    minDate={dateRange[0] || undefined}
     isClearable
     placeholderText="End Date"
     className="bg-white rounded"

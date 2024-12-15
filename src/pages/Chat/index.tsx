@@ -5788,13 +5788,13 @@ console.log(prompt);
                     <div className="flex space-x-2">
                       <DatePicker
                         selected={blastStartDate}
-                        onChange={(date: Date) => setBlastStartDate(date)}
+                        onChange={(date: Date | null) => setBlastStartDate(date ? date : new Date())}
                         dateFormat="MMMM d, yyyy"
                         className="w-full border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                       />
                       <DatePicker
                         selected={blastStartTime}
-                        onChange={(date: Date) => setBlastStartTime(date)}
+                        onChange={(date: Date | null) => setBlastStartTime(date)}
                         showTimeSelect
                         showTimeSelectOnly
                         timeIntervals={15}
@@ -8035,7 +8035,7 @@ console.log(prompt);
               </label>
               <DatePicker
                 selected={reminderDate}
-                onChange={(date: Date) => setReminderDate(date)}
+                onChange={(date: Date | null) => setReminderDate(date)}
                 showTimeSelect
                 timeFormat="HH:mm"
                 timeIntervals={15}
