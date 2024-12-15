@@ -17,6 +17,7 @@ import LeafletMap from "@/components/LeafletMap";
 import { Menu } from "@/components/Base/Headless";
 import Table from "@/components/Base/Table";
 import axios from 'axios';
+
 import { getFirebaseToken, messaging } from "../../firebaseconfig";
 import { getAuth } from "firebase/auth";
 import { initializeApp } from "firebase/app";
@@ -26,7 +27,7 @@ import { onMessage } from "firebase/messaging";
 import { useNavigate } from "react-router-dom";
 import LoadingIcon from "@/components/Base/LoadingIcon";
 import { Bar, Doughnut, Line } from "react-chartjs-2";
-import { Chart as ChartJS, ChartData, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, PointElement, LineElement } from 'chart.js';
+import { Chart as ChartJS, ChartData, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, PointElement, LineElement, ChartOptions } from 'chart.js';
 import { BarChart } from "lucide-react";
 import { useContacts } from "@/contact";
 import { User, ChevronRight } from 'lucide-react';
@@ -343,11 +344,11 @@ interface Tag {
   const [totalContributors, setTotalContributors] = useState<number>(0);
   const [monthlyZakatAmount, setMonthlyZakatAmount] = useState<number>(0);
   const [avgZakatAmount, setAvgZakatAmount] = useState<number>(0);
-  const [zakatTypeDistribution, setZakatTypeDistribution] = useState<ChartData<'doughnut'>>({
+  const [zakatTypeDistribution, setZakatTypeDistribution] = useState<ChartData>({
     labels: [],
     datasets: []
   });
-  const [zakatTrends, setZakatTrends] = useState<ChartData<'line'>>({
+  const [zakatTrends, setZakatTrends] = useState<ChartData>({
     labels: [],
     datasets: []
   });
@@ -361,7 +362,7 @@ interface Tag {
     totalAmount: number;
     contributions: number;
   }>>([]);
-  const [regionalDistribution, setRegionalDistribution] = useState<ChartData<'bar'>>({
+  const [regionalDistribution, setRegionalDistribution] = useState<ChartData>({
     labels: [],
     datasets: []
   });
@@ -606,7 +607,7 @@ const calculateZakatMetrics = async () => {
           fill: true,
           pointRadius: 3,
           pointHoverRadius: 5
-        }]
+        } as ChartDataset]
       });
   
     } catch (error) {
@@ -1434,7 +1435,7 @@ const getEarliestContactDate = async () => {
           },
           ticks: {
             color: 'rgb(107, 114, 128)',
-            stepSize: Math.max(1, Math.ceil(Math.max(...contactsOverTime.map(d => d.count)) / 10)),
+            maxTicksLimit: contactsTimeFilter === 'today' ? 24 : 10, // Show all hours for 'today', limit to 10 for other filters
           },
         },
         x: {
@@ -1564,17 +1565,17 @@ const getEarliestContactDate = async () => {
   }
 
   // Add these new state variables
-  const [ageDistribution, setAgeDistribution] = useState<ChartData<'bar'>>({
+  const [ageDistribution, setAgeDistribution] = useState<ChartData>({
     labels: [],
     datasets: []
   });
 
-  const [occupationDistribution, setOccupationDistribution] = useState<ChartData<'pie'>>({
+  const [occupationDistribution, setOccupationDistribution] = useState<ChartData>({
     labels: [],
     datasets: []
   });
 
-  const [seasonalTrends, setSeasonalTrends] = useState<ChartData<'line'>>({
+  const [seasonalTrends, setSeasonalTrends] = useState<ChartData>({
     labels: [],
     datasets: []
   });
@@ -2093,142 +2094,1639 @@ const getEarliestContactDate = async () => {
     }
   ];
 
+  // Add this right after your existing state declarations
+  const [selectedDepartment, setSelectedDepartment] = useState('Pengedaran & Kutipan Zakat');
+
+  const departments = [
+    'Pengedaran & Kutipan Zakat',
+    'Bahagian Undang-Undang Sivil',
+    'Bahagian Undang-Undang Syariah',
+    'Bahagian Kewangan',
+    'Bahagian Belanjawan & Perolehan',
+    'Bahagian Pelaburan & Pengurusan Dana',
+    'Bahagian Pengurusan Sumber Manusia',
+    'Bahagian Pentadbiran',
+    'Bahagian Pengurusan Arkib',
+    'Bahagian Perancangan Strategik',
+    'Bahagian Tadbir Urus Korporat',
+    'Bahagian Pengurusan Hartanah',
+    'Bahagian Pengurusan Projek',
+    'Bahagian Pembangunan Ekonomi',
+    'Bahagian Pendaftaran Muallaf & Pembangunan PIBK',
+    'Bahagian Pemulihan Ar-Riqab',
+    'Bahagian Harta Baitulmal',
+    'Bahagian Dakwah & Pemasaran',
+    'Bahagian Kesetiausahaan',
+    'Bahagian Risiko & Pematuhan',
+    'Bahagian Teknologi Maklumat',
+    'Bahagian Komunikasi Korporat'
+  ];
+
+  // Add these interfaces at the top of your file
+  interface DepartmentDashboard {
+    id: string;
+    title: string;
+    kpis: KPICard[];
+    charts: {
+      type: 'line' | 'bar' | 'pie' | 'doughnut';
+      title: string;
+      data: ChartData;
+      options?: ChartOptions;
+    }[];
+    tables?: TableData[];
+  }
+
+  interface KPICard {
+    title: string;
+    value: string | number;
+    target?: string | number;
+    change?: number;
+    icon: string;
+    color: string;
+  }
+
+  interface ChartDataset {
+    label?: string;
+    data: number[];
+    backgroundColor?: string | string[];
+    borderColor?: string;
+    tension?: number;
+  }
+
+  interface ChartData {
+    labels: string[];
+    datasets: ChartDataset[];
+  }
+
+  interface TableData {
+    title: string;
+    headers: string[];
+    rows: (string | number)[][];
+  }
+
+  // Add this after your existing state declarations
+  const departmentDashboards: { [key: string]: DepartmentDashboard } = {
+    'Bahagian Undang-Undang Sivil': {
+      id: 'civil-law',
+      title: 'Dashboard Bahagian Undang-Undang Sivil',
+      kpis: [
+        {
+          title: 'Kes Aktif',
+          value: '127',
+          target: '150',
+          change: 5.2,
+          icon: 'briefcase',
+          color: 'text-blue-500'
+        },
+        {
+          title: 'Kadar Penyelesaian',
+          value: '85%',
+          target: '90%',
+          change: 2.3,
+          icon: 'check-circle',
+          color: 'text-green-500'
+        },
+        {
+          title: 'Tempoh Purata Kes',
+          value: '45 hari',
+          target: '40 hari',
+          change: -5.1,
+          icon: 'clock',
+          color: 'text-yellow-500'
+        }
+      ],
+      charts: [
+        {
+          type: 'bar',
+          title: 'Agihan Kes Mengikut Jenis',
+          data: {
+            labels: ['Hartanah', 'Kontrak', 'Pekerjaan', 'Korporat', 'Lain-lain'],
+            datasets: [{
+              label: 'Bilangan Kes',
+              data: [45, 32, 28, 15, 7],
+              backgroundColor: 'rgba(54, 162, 235, 0.8)'
+            }]
+          }
+        }
+      ],
+      tables: [
+        {
+          title: 'Status Kes Terkini',
+          headers: ['ID Kes', 'Jenis', 'Status', 'Kemaskini Terakhir'],
+          rows: [
+            ['KS-2024-001', 'Hartanah', 'Dalam Proses', '15/01/2024'],
+            ['KS-2024-002', 'Kontrak', 'Selesai', '14/01/2024'],
+            ['KS-2024-003', 'Pekerjaan', 'Tertunda', '13/01/2024']
+          ]
+        }
+      ]
+    },
+
+    'Bahagian Undang-Undang Syariah': {
+      id: 'shariah-law',
+      title: 'Shariah Law Division Dashboard',
+      kpis: [
+        {
+          title: 'Active Syariah Cases',
+          value: '95',
+          target: '100',
+          change: 3.2,
+          icon: 'book',
+          color: 'text-green-500'
+        },
+        {
+          title: 'Fatwa Requests',
+          value: '42',
+          target: '50',
+          change: 15.4,
+          icon: 'file-text',
+          color: 'text-blue-500'
+        },
+        {
+          title: 'Resolution Rate',
+          value: '88%',
+          target: '95%',
+          change: 2.1,
+          icon: 'check-square',
+          color: 'text-purple-500'
+        },
+        {
+          title: 'Compliance Score',
+          value: '96.5%',
+          target: '100%',
+          change: 1.5,
+          icon: 'shield',
+          color: 'text-yellow-500'
+        }
+      ],
+      charts: [
+        {
+          type: 'doughnut',
+          title: 'Case Categories Distribution',
+          data: {
+            labels: ['Family Law', 'Inheritance', 'Waqf', 'Marriage', 'Others'],
+            datasets: [{
+              data: [35, 25, 20, 15, 5],
+              backgroundColor: [
+                'rgba(255, 99, 132, 0.8)',
+                'rgba(54, 162, 235, 0.8)',
+                'rgba(255, 206, 86, 0.8)',
+                'rgba(75, 192, 192, 0.8)',
+                'rgba(153, 102, 255, 0.8)'
+              ]
+            }]
+          }
+        },
+        {
+          type: 'line',
+          title: 'Monthly Fatwa Requests',
+          data: {
+            labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+            datasets: [{
+              label: 'Requests',
+              data: [8, 12, 15, 10, 14, 16],
+              borderColor: 'rgb(75, 192, 192)',
+              tension: 0.1
+            }]
+          }
+        }
+      ],
+      tables: [
+        {
+          title: 'Recent Fatwa Requests',
+          headers: ['Reference', 'Subject', 'Status', 'Date Submitted'],
+          rows: [
+            ['FTW-2024-001', 'Marriage Procedures', 'Under Review', '2024-01-15'],
+            ['FTW-2024-002', 'Inheritance Rights', 'Completed', '2024-01-14'],
+            ['FTW-2024-003', 'Waqf Management', 'In Progress', '2024-01-13'],
+            ['FTW-2024-004', 'Family Law', 'Pending', '2024-01-12']
+          ]
+        }
+      ]
+    },
+
+    'Bahagian Kewangan': {
+      id: 'finance',
+      title: 'Dashboard Bahagian Kewangan',
+      kpis: [
+        {
+          title: 'Jumlah Pendapatan',
+          value: 'RM 15,700,000',
+          target: 'RM 16,000,000',
+          change: 5.2,
+          icon: 'dollar-sign',
+          color: 'text-green-500'
+        },
+        {
+          title: 'Perbelanjaan Operasi',
+          value: 'RM 8,300,000',
+          target: 'RM 8,500,000',
+          change: -2.1,
+          icon: 'trending-down',
+          color: 'text-blue-500'
+        },
+        {
+          title: 'Penggunaan Bajet',
+          value: '92.5%',
+          target: '95%',
+          change: 1.5,
+          icon: 'pie-chart',
+          color: 'text-purple-500'
+        }
+      ],
+      charts: [
+        {
+          type: 'bar',
+          title: 'Penggunaan Bajet Mengikut Jabatan',
+          data: {
+            labels: ['Pentadbiran', 'IT', 'Sumber Manusia', 'Operasi', 'Pemasaran', 'Undang-undang'],
+            datasets: [{
+              label: 'Peratusan Penggunaan',
+              data: [85, 92, 78, 88, 76, 95],
+              backgroundColor: 'rgba(54, 162, 235, 0.8)'
+            }]
+          }
+        }
+      ],
+      tables: [
+        {
+          title: 'Transaksi Terkini',
+          headers: ['Tarikh', 'Keterangan', 'Jumlah', 'Status'],
+          rows: [
+            ['15/01/2024', 'Pembiayaan Program', 'RM 250,000', 'Selesai'],
+            ['14/01/2024', 'Perbelanjaan Operasi', 'RM 75,000', 'Dalam Proses'],
+            ['13/01/2024', 'Pembangunan Infrastruktur', 'RM 500,000', 'Dalam Proses']
+          ]
+        }
+      ]
+    },
+
+    'Bahagian Belanjawan & Perolehan': {
+      id: 'budget-procurement',
+      title: 'Dashboard Bahagian Belanjawan & Perolehan',
+      kpis: [
+        {
+          title: 'Bajet Tahunan',
+          value: 'RM 25,000,000',
+          target: 'RM 25,000,000',
+          change: 0,
+          icon: 'database',
+          color: 'text-blue-500'
+        },
+        {
+          title: 'Penjimatan Perolehan',
+          value: 'RM 1,200,000',
+          target: 'RM 1,000,000',
+          change: 20,
+          icon: 'trending-down',
+          color: 'text-green-500'
+        },
+        {
+          title: 'Active Tenders',
+          value: '15',
+          target: '20',
+          change: -25,
+          icon: 'file-text',
+          color: 'text-yellow-500'
+        },
+        {
+          title: 'Vendor Compliance',
+          value: '94%',
+          target: '95%',
+          change: 1,
+          icon: 'check-square',
+          color: 'text-purple-500'
+        }
+      ],
+      charts: [
+        {
+          type: 'bar',
+          title: 'Budget Utilization by Department',
+          data: {
+            labels: ['Admin', 'IT', 'HR', 'Operations', 'Marketing', 'Legal'],
+            datasets: [{
+              label: 'Utilized',
+              data: [85, 92, 78, 88, 76, 95],
+              backgroundColor: 'rgba(54, 162, 235, 0.8)'
+            }]
+          }
+        },
+        {
+          type: 'line',
+          title: 'Monthly Procurement Spend',
+          data: {
+            labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+            datasets: [{
+              label: 'Spend (RM)',
+              data: [2.1, 1.8, 2.2, 1.9, 2.3, 2.0],
+              borderColor: 'rgb(75, 192, 192)',
+              tension: 0.1
+            }]
+          }
+        }
+      ],
+      tables: [
+        {
+          title: 'Active Tenders',
+          headers: ['Tender ID', 'Description', 'Value (RM)', 'Status'],
+          rows: [
+            ['T2024-001', 'IT Infrastructure', '1,500,000', 'Open'],
+            ['T2024-002', 'Office Supplies', '250,000', 'Under Review'],
+            ['T2024-003', 'Vehicle Fleet', '800,000', 'Evaluation'],
+            ['T2024-004', 'Building Maintenance', '450,000', 'Shortlisting']
+          ]
+        }
+      ]
+    },
+
+    'Bahagian Pelaburan & Pengurusan Dana': {
+      id: 'investment-fund',
+      title: 'Investment & Fund Management Division Dashboard',
+      kpis: [
+        {
+          title: 'Jumlah AUM',
+          value: 'RM 850,000,000',
+          target: 'RM 900,000,000',
+          change: 5.5,
+          icon: 'trending-up',
+          color: 'text-blue-500'
+        },
+        {
+          title: 'YTD Returns',
+          value: '8.2%',
+          target: '7.5%',
+          change: 0.7,
+          icon: 'percent',
+          color: 'text-green-500'
+        },
+        {
+          title: 'Investment Projects',
+          value: '12',
+          target: '15',
+          change: -20,
+          icon: 'briefcase',
+          color: 'text-yellow-500'
+        },
+        {
+          title: 'Risk Score',
+          value: 'Low',
+          icon: 'shield',
+          color: 'text-purple-500'
+        }
+      ],
+      charts: [
+        {
+          type: 'line',
+          title: 'Portfolio Performance',
+          data: {
+            labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+            datasets: [{
+              label: 'Returns (%)',
+              data: [1.2, 1.5, 1.1, 1.8, 1.4, 1.2],
+              borderColor: 'rgb(75, 192, 192)',
+              tension: 0.1
+            }]
+          }
+        },
+        {
+          type: 'doughnut',
+          title: 'Asset Allocation',
+          data: {
+            labels: ['Equities', 'Fixed Income', 'Real Estate', 'Cash', 'Others'],
+            datasets: [{
+              data: [40, 30, 15, 10, 5],
+              backgroundColor: [
+                'rgba(255, 99, 132, 0.8)',
+                'rgba(54, 162, 235, 0.8)',
+                'rgba(255, 206, 86, 0.8)',
+                'rgba(75, 192, 192, 0.8)',
+                'rgba(153, 102, 255, 0.8)'
+              ]
+            }]
+          }
+        }
+      ],
+      tables: [
+        {
+          title: 'Investment Performance',
+          headers: ['Asset Class', 'YTD Return', 'Benchmark', 'Status'],
+          rows: [
+            ['Equities', '9.5%', '8.2%', 'Outperforming'],
+            ['Fixed Income', '4.2%', '4.0%', 'On Target'],
+            ['Real Estate', '6.8%', '6.5%', 'Outperforming'],
+            ['Alternative', '7.1%', '7.0%', 'On Target']
+          ]
+        }
+      ]
+    },
+
+    'Bahagian Pengurusan Sumber Manusia': {
+      id: 'hr',
+      title: 'Dashboard Bahagian Pengurusan Sumber Manusia',
+      kpis: [
+        {
+          title: 'Jumlah Pekerja',
+          value: '342',
+          target: '350',
+          change: 2.1,
+          icon: 'users',
+          color: 'text-blue-500'
+        },
+        {
+          title: 'Kepuasan Pekerja',
+          value: '87%',
+          target: '90%',
+          change: 3.5,
+          icon: 'smile',
+          color: 'text-green-500'
+        },
+        {
+          title: 'Kadar Latihan',
+          value: '94%',
+          target: '95%',
+          change: 1.2,
+          icon: 'award',
+          color: 'text-yellow-500'
+        }
+      ],
+      charts: [
+        {
+          type: 'bar',
+          title: 'Bilangan Pekerja Mengikut Jabatan',
+          data: {
+            labels: ['Pentadbiran', 'Kewangan', 'IT', 'Operasi', 'Undang-undang', 'Sumber Manusia'],
+            datasets: [{
+              label: 'Bilangan Pekerja',
+              data: [45, 38, 52, 65, 41, 35],
+              backgroundColor: 'rgba(54, 162, 235, 0.8)'
+            }]
+          }
+        }
+      ],
+      tables: [
+        {
+          title: 'Status Pengambilan Terkini',
+          headers: ['Jawatan', 'Jabatan', 'Permohonan', 'Status'],
+          rows: [
+            ['Pengurus Kanan', 'Kewangan', '24', 'Temuduga'],
+            ['Pakar IT', 'Teknologi', '18', 'Saringan'],
+            ['Pegawai Undang-undang', 'Undang-undang', '15', 'Senarai Pendek']
+          ]
+        }
+      ]
+    },
+
+    'Bahagian Pentadbiran': {
+      id: 'administration',
+      title: 'Administration Division Dashboard',
+      kpis: [
+        {
+          title: 'Facility Utilization',
+          value: '82%',
+          target: '85%',
+          change: 2.0,
+          icon: 'home',
+          color: 'text-blue-500'
+        },
+        {
+          title: 'Service Requests',
+          value: '45',
+          target: '40',
+          change: -12.5,
+          icon: 'tool',
+          color: 'text-yellow-500'
+        },
+        {
+          title: 'Cost Efficiency',
+          value: '93%',
+          target: '95%',
+          change: 1.5,
+          icon: 'dollar-sign',
+          color: 'text-green-500'
+        },
+        {
+          title: 'Asset Maintenance',
+          value: '96%',
+          target: '98%',
+          change: -2.0,
+          icon: 'settings',
+          color: 'text-purple-500'
+        }
+      ],
+      charts: [
+        {
+          type: 'line',
+          title: 'Monthly Service Requests',
+          data: {
+            labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+            datasets: [{
+              label: 'Requests',
+              data: [42, 38, 45, 40, 43, 45],
+              borderColor: 'rgb(75, 192, 192)',
+              tension: 0.1
+            }]
+          }
+        },
+        {
+          type: 'doughnut',
+          title: 'Request Categories',
+          data: {
+            labels: ['Maintenance', 'IT Support', 'Facilities', 'Security', 'Others'],
+            datasets: [{
+              data: [35, 25, 20, 15, 5],
+              backgroundColor: [
+                'rgba(255, 99, 132, 0.8)',
+                'rgba(54, 162, 235, 0.8)',
+                'rgba(255, 206, 86, 0.8)',
+                'rgba(75, 192, 192, 0.8)',
+                'rgba(153, 102, 255, 0.8)'
+              ]
+            }]
+          }
+        }
+      ],
+      tables: [
+        {
+          title: 'Recent Service Requests',
+          headers: ['Request ID', 'Type', 'Status', 'Priority'],
+          rows: [
+            ['SR-2024-001', 'Maintenance', 'In Progress', 'High'],
+            ['SR-2024-002', 'IT Support', 'Completed', 'Medium'],
+            ['SR-2024-003', 'Security', 'Pending', 'Low'],
+            ['SR-2024-004', 'Facilities', 'In Review', 'Medium']
+          ]
+        }
+      ]
+    },
+
+    'Bahagian Pengurusan Arkib': {
+      id: 'archive',
+      title: 'Dashboard Bahagian Pengurusan Arkib',
+      kpis: [
+        {
+          title: 'Jumlah Dokumen',
+          value: '125,432',
+          target: '130,000',
+          change: 3.5,
+          icon: 'file',
+          color: 'text-blue-500'
+        },
+        {
+          title: 'Kadar Pendigitalan',
+          value: '78%',
+          target: '85%',
+          change: 5.2,
+          icon: 'hard-drive',
+          color: 'text-green-500'
+        },
+        {
+          title: 'Masa Pencarian',
+          value: '15 min',
+          target: '12 min',
+          change: -20,
+          icon: 'clock',
+          color: 'text-yellow-500'
+        }
+      ],
+      charts: [
+        {
+          type: 'bar',
+          title: 'Kategori Dokumen',
+          data: {
+            labels: ['Undang-undang', 'Kewangan', 'Pentadbiran', 'Sejarah', 'Lain-lain'],
+            datasets: [{
+              label: 'Bilangan Dokumen',
+              data: [45000, 35000, 25000, 15000, 5432],
+              backgroundColor: 'rgba(54, 162, 235, 0.8)'
+            }]
+          }
+        }
+      ],
+      tables: [
+        {
+          title: 'Permohonan Arkib Terkini',
+          headers: ['ID Permohonan', 'Jenis Dokumen', 'Status', 'Tarikh'],
+          rows: [
+            ['AR-2024-001', 'Fail Undang-undang', 'Diambil', '15/01/2024'],
+            ['AR-2024-002', 'Rekod Kewangan', 'Menunggu', '14/01/2024'],
+            ['AR-2024-003', 'Dokumen Sejarah', 'Dalam Proses', '13/01/2024']
+          ]
+        }
+      ]
+    },
+
+    'Bahagian Perancangan Strategik': {
+      id: 'strategic-planning',
+      title: 'Dashboard Bahagian Perancangan Strategik',
+      kpis: [
+        {
+          title: 'Projek Strategik',
+          value: '15',
+          target: '20',
+          change: 5.2,
+          icon: 'briefcase',
+          color: 'text-blue-500'
+        },
+        {
+          title: 'Penilaian Risiko',
+          value: '85%',
+          target: '90%',
+          change: 2.3,
+          icon: 'shield',
+          color: 'text-green-500'
+        },
+        {
+          title: 'Pencapaian KPI',
+          value: '95%',
+          target: '100%',
+          change: 1.5,
+          icon: 'check-circle',
+          color: 'text-purple-500'
+        },
+        {
+          title: 'Strategic Impact',
+          value: '75%',
+          target: '80%',
+          change: 0.5,
+          icon: 'trending-up',
+          color: 'text-yellow-500'
+        }
+      ],
+      charts: [
+        {
+          type: 'bar',
+          title: 'Strategic Project Completion',
+          data: {
+            labels: ['Completed', 'In Progress', 'Pending', 'Cancelled'],
+            datasets: [{
+              label: 'Number of Projects',
+              data: [10, 5, 3, 2],
+              backgroundColor: [
+                'rgba(75, 192, 192, 0.6)',
+                'rgba(54, 162, 235, 0.6)',
+                'rgba(255, 206, 86, 0.6)',
+                'rgba(255, 99, 132, 0.6)'
+              ]
+            }]
+          }
+        },
+        {
+          type: 'line',
+          title: 'Strategic Risk Analysis',
+          data: {
+            labels: ['Low', 'Medium', 'High', 'Critical'],
+            datasets: [{
+              label: 'Risk Percentage',
+              data: [20, 40, 30, 10],
+              backgroundColor: [
+                'rgba(75, 192, 192, 0.6)',
+                'rgba(54, 162, 235, 0.6)',
+                'rgba(255, 206, 86, 0.6)',
+                'rgba(255, 99, 132, 0.6)'
+              ]
+            }]
+          }
+        }
+      ],
+      tables: [
+        {
+          title: 'Strategic Initiatives',
+          headers: ['Project', 'Objective', 'Status', 'Impact'],
+          rows: [
+            ['Project X', 'Increase Market Share', 'Completed', 'Increased market share by 10%'],
+            ['Project Y', 'Improve Customer Satisfaction', 'In Progress', 'Customer satisfaction improved by 15%'],
+            ['Project Z', 'Reduce Operational Costs', 'Pending', 'Cost reduction target set at 10%'],
+            ['Project W', 'Develop New Product Line', 'Cancelled', 'Project cancelled due to market conditions']
+          ]
+        }
+      ]
+    },
+
+    'Bahagian Tadbir Urus Korporat': {
+      id: 'corporate-governance',
+      title: 'Dashboard Bahagian Tadbir Urus Korporat',
+      kpis: [
+        {
+          title: 'Mesyuarat Lembaga',
+          value: '12',
+          target: '15',
+          change: 2.3,
+          icon: 'users',
+          color: 'text-blue-500'
+        },
+        {
+          title: 'Kehadiran Lembaga',
+          value: '90%',
+          target: '95%',
+          change: 1.5,
+          icon: 'user-check',
+          color: 'text-green-500'
+        },
+        {
+          title: 'Pematuhan Polisi',
+          value: '95%',
+          target: '100%',
+          change: 0.8,
+          icon: 'check-circle',
+          color: 'text-purple-500'
+        }
+      ],
+      charts: [
+        {
+          type: 'bar',
+          title: 'Pematuhan Mengikut Kategori',
+          data: {
+            labels: ['Kewangan', 'Operasi', 'Risiko', 'Etika', 'Pelaporan'],
+            datasets: [{
+              label: 'Tahap Pematuhan (%)',
+              data: [95, 92, 88, 96, 94],
+              backgroundColor: 'rgba(54, 162, 235, 0.8)'
+            }]
+          }
+        }
+      ],
+      tables: [
+        {
+          title: 'Status Pematuhan Polisi',
+          headers: ['Polisi', 'Jabatan', 'Status', 'Tindakan'],
+          rows: [
+            ['Polisi Kewangan', 'Kewangan', '95%', 'Dikemaskini'],
+            ['Polisi Operasi', 'Operasi', '92%', 'Dalam Semakan'],
+            ['Polisi Risiko', 'Risiko', '88%', 'Perlu Tindakan']
+          ]
+        }
+      ]
+    },
+
+    'Bahagian Pengurusan Hartanah': {
+      id: 'property-management',
+      title: 'Dashboard Bahagian Pengurusan Hartanah',
+      kpis: [
+        {
+          title: 'Jumlah Hartanah',
+          value: '85',
+          target: '90',
+          change: 2.5,
+          icon: 'home',
+          color: 'text-blue-500'
+        },
+        {
+          title: 'Kadar Penghunian',
+          value: '88%',
+          target: '90%',
+          change: 1.8,
+          icon: 'users',
+          color: 'text-green-500'
+        },
+        {
+          title: 'Pendapatan Sewa',
+          value: 'RM 2,500,000',
+          target: 'RM 3,000,000',
+          change: 3.2,
+          icon: 'dollar-sign',
+          color: 'text-yellow-500'
+        }
+      ],
+      charts: [
+        {
+          type: 'doughnut',
+          title: 'Jenis Hartanah',
+          data: {
+            labels: ['Komersial', 'Kediaman', 'Industri', 'Tanah', 'Lain-lain'],
+            datasets: [{
+              data: [35, 25, 20, 15, 5],
+              backgroundColor: [
+                'rgba(255, 99, 132, 0.8)',
+                'rgba(54, 162, 235, 0.8)',
+                'rgba(255, 206, 86, 0.8)',
+                'rgba(75, 192, 192, 0.8)',
+                'rgba(153, 102, 255, 0.8)'
+              ]
+            }]
+          }
+        }
+      ],
+      tables: [
+        {
+          title: 'Status Penyelenggaraan',
+          headers: ['Hartanah', 'Jenis', 'Kos (RM)', 'Status'],
+          rows: [
+            ['Bangunan A', 'Komersial', '250,000', 'Dalam Proses'],
+            ['Kompleks B', 'Industri', '180,000', 'Selesai'],
+            ['Pangsapuri C', 'Kediaman', '120,000', 'Dirancang']
+          ]
+        }
+      ]
+    },
+
+    'Bahagian Pengurusan Projek': {
+      id: 'project-management',
+      title: 'Dashboard Bahagian Pengurusan Projek',
+      kpis: [
+        {
+          title: 'Projek Aktif',
+          value: '25',
+          target: '30',
+          change: 2.8,
+          icon: 'briefcase',
+          color: 'text-blue-500'
+        },
+        {
+          title: 'Kadar Siap',
+          value: '85%',
+          target: '90%',
+          change: 1.5,
+          icon: 'check-circle',
+          color: 'text-green-500'
+        },
+        {
+          title: 'Prestasi Bajet',
+          value: '92%',
+          target: '95%',
+          change: 0.8,
+          icon: 'dollar-sign',
+          color: 'text-yellow-500'
+        }
+      ],
+      charts: [
+        {
+          type: 'bar',
+          title: 'Status Projek',
+          data: {
+            labels: ['Perancangan', 'Pelaksanaan', 'Pengujian', 'Selesai', 'Ditangguh'],
+            datasets: [{
+              label: 'Bilangan Projek',
+              data: [8, 10, 4, 2, 1],
+              backgroundColor: 'rgba(54, 162, 235, 0.8)'
+            }]
+          }
+        }
+      ],
+      tables: [
+        {
+          title: 'Projek Utama',
+          headers: ['Projek', 'Pengurus', 'Bajet (RM)', 'Status'],
+          rows: [
+            ['Sistem Baru', 'Ahmad Razak', '1,500,000', 'Dalam Proses'],
+            ['Naik Taraf', 'Siti Aminah', '800,000', 'Perancangan'],
+            ['Integrasi', 'Mohamed Ali', '650,000', 'Pengujian']
+          ]
+        }
+      ]
+    },
+
+    'Bahagian Pembangunan Ekonomi': {
+      id: 'economic-development',
+      title: 'Economic Development Division Dashboard',
+      kpis: [
+        {
+          title: 'GDP Growth',
+          value: '5.2%',
+          target: '6%',
+          change: 0.8,
+          icon: 'dollar-sign',
+          color: 'text-green-500'
+        },
+        {
+          title: 'Foreign Investment',
+          value: 'RM 1.2B',
+          target: 'RM 1.5B',
+          change: 0.7,
+          icon: 'trending-up',
+          color: 'text-blue-500'
+        },
+        {
+          title: 'Unemployment Rate',
+          value: '3.5%',
+          target: '3%',
+          change: -0.5,
+          icon: 'user-minus',
+          color: 'text-red-500'
+        },
+        {
+          title: 'Inflation Rate',
+          value: '2.1%',
+          target: '2%',
+          change: 0.1,
+          icon: 'trending-up',
+          color: 'text-yellow-500'
+        }
+      ],
+      charts: [
+        {
+          type: 'bar',
+          title: 'Economic Indicators',
+          data: {
+            labels: ['GDP', 'Foreign Investment', 'Unemployment Rate', 'Inflation Rate'],
+            datasets: [{
+              label: 'Value (RM)',
+              data: [1500000000, 1200000000, 350000, 21000000],
+              backgroundColor: [
+                'rgba(75, 192, 192, 0.6)',
+                'rgba(54, 162, 235, 0.6)',
+                'rgba(255, 99, 132, 0.6)',
+                'rgba(255, 206, 86, 0.6)'
+              ]
+            }]
+          }
+        },
+        {
+          type: 'line',
+          title: 'Foreign Investment Trends',
+          data: {
+            labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+            datasets: [{
+              label: 'Investment (RM)',
+              data: [100000000, 120000000, 150000000, 180000000, 200000000, 220000000],
+              borderColor: 'rgb(75, 192, 192)',
+              tension: 0.1
+            }]
+          }
+        }
+      ],
+      tables: [
+        {
+          title: 'Economic Impact Analysis',
+          headers: ['Sector', 'Contribution', 'Growth Rate', 'Impact'],
+          rows: [
+            ['Manufacturing', 'RM 500M', '5%', 'Increased exports by 10%'],
+            ['Services', 'RM 700M', '6%', 'Improved customer satisfaction by 15%'],
+            ['Technology', 'RM 300M', '7%', 'Innovation hub established'],
+            ['Agriculture', 'RM 200M', '4%', 'Sustainable farming practices adopted']
+          ]
+        }
+      ]
+    },
+
+    'Bahagian Pendaftaran Muallaf & Pembangunan PIBK': {
+      id: 'muallaf-pibk',
+      title: 'Muallaf & PIBK Registration Division Dashboard',
+      kpis: [
+        {
+          title: 'New Registrations',
+          value: '1,200',
+          target: '1,500',
+          change: 20.5,
+          icon: 'user-plus',
+          color: 'text-green-500'
+        },
+        {
+          title: 'Renewal Rate',
+          value: '85%',
+          target: '90%',
+          change: 15.4,
+          icon: 'percent',
+          color: 'text-yellow-500'
+        },
+        {
+          title: 'Compliance Rate',
+          value: '95%',
+          target: '100%',
+          change: 5.2,
+          icon: 'check-circle',
+          color: 'text-purple-500'
+        },
+        {
+          title: 'Average Processing Time',
+          value: '30 days',
+          target: '35 days',
+          change: 1.2,
+          icon: 'clock',
+          color: 'text-blue-500'
+        }
+      ],
+      charts: [
+        {
+          type: 'bar',
+          title: 'Registration Trends',
+          data: {
+            labels: ['New Registrations', 'Renewals', 'Compliance', 'Average Time'],
+            datasets: [{
+              label: 'Number of Registrations',
+              data: [1200, 1000, 150, 30],
+              backgroundColor: [
+                'rgba(75, 192, 192, 0.6)',
+                'rgba(54, 162, 235, 0.6)',
+                'rgba(255, 206, 86, 0.6)',
+                'rgba(255, 99, 132, 0.6)'
+              ]
+            }]
+          }
+        },
+        {
+          type: 'line',
+          title: 'Renewal Rate by Type',
+          data: {
+            labels: ['Individual', 'Business', 'Corporate', 'Government'],
+            datasets: [{
+              label: 'Renewal Percentage',
+              data: [70, 60, 50, 40],
+              backgroundColor: [
+                'rgba(75, 192, 192, 0.6)',
+                'rgba(54, 162, 235, 0.6)',
+                'rgba(255, 206, 86, 0.6)',
+                'rgba(255, 99, 132, 0.6)'
+              ]
+            }]
+          }
+        }
+      ],
+      tables: [
+        {
+          title: 'Registration Process',
+          headers: ['Step', 'Description', 'Average Time', 'Status'],
+          rows: [
+            ['Step 1', 'Application Submission', '5 days', 'Completed'],
+            ['Step 2', 'Verification', '7 days', 'In Progress'],
+            ['Step 3', 'Payment', '3 days', 'Pending'],
+            ['Step 4', 'Approval', '5 days', 'Completed']
+          ]
+        }
+      ]
+    },
+
+    'Bahagian Pemulihan Ar-Riqab': {
+      id: 'restoration',
+      title: 'Restoration Division Dashboard',
+      kpis: [
+        {
+          title: 'Restoration Projects',
+          value: '10',
+          target: '15',
+          change: 5.2,
+          icon: 'briefcase',
+          color: 'text-blue-500'
+        },
+        {
+          title: 'Completion Rate',
+          value: '85%',
+          target: '90%',
+          change: 2.3,
+          icon: 'check-circle',
+          color: 'text-green-500'
+        },
+        {
+          title: 'Risk Management',
+          value: '80%',
+          target: '85%',
+          change: 2.1,
+          icon: 'shield',
+          color: 'text-purple-500'
+        },
+        {
+          title: 'Compliance Score',
+          value: '95%',
+          target: '100%',
+          change: 0.5,
+          icon: 'check-circle',
+          color: 'text-yellow-500'
+        }
+      ],
+      charts: [
+        {
+          type: 'bar',
+          title: 'Restoration Project Completion',
+          data: {
+            labels: ['Completed', 'In Progress', 'Pending', 'Cancelled'],
+            datasets: [{
+              label: 'Number of Projects',
+              data: [8, 2, 1, 1],
+              backgroundColor: [
+                'rgba(75, 192, 192, 0.6)',
+                'rgba(54, 162, 235, 0.6)',
+                'rgba(255, 206, 86, 0.6)',
+                'rgba(255, 99, 132, 0.6)'
+              ]
+            }]
+          }
+        },
+        {
+          type: 'line',
+          title: 'Risk Analysis by Type',
+          data: {
+            labels: ['Historical', 'Religious', 'Cultural', 'Natural'],
+            datasets: [{
+              label: 'Risk Percentage',
+              data: [30, 40, 20, 10],
+              backgroundColor: [
+                'rgba(75, 192, 192, 0.6)',
+                'rgba(54, 162, 235, 0.6)',
+                'rgba(255, 206, 86, 0.6)',
+                'rgba(255, 99, 132, 0.6)'
+              ]
+            }]
+          }
+        }
+      ],
+      tables: [
+        {
+          title: 'Restoration Initiatives',
+          headers: ['Project', 'Objective', 'Status', 'Risk Level'],
+          rows: [
+            ['Project X', 'Restore Historical Site', 'Completed', 'Low'],
+            ['Project Y', 'Revitalize Religious Site', 'In Progress', 'Medium'],
+            ['Project Z', 'Preserve Cultural Heritage', 'Pending', 'High'],
+            ['Project W', 'Sustain Natural Resources', 'Cancelled', 'Critical']
+          ]
+        }
+      ]
+    },
+
+    'Bahagian Harta Baitulmal': {
+      id: 'baitulmal',
+      title: 'Dashboard Bahagian Harta Baitulmal',
+      kpis: [
+        {
+          title: 'Jumlah Aset',
+          value: 'RM 250,000,000',
+          target: 'RM 300,000,000',
+          change: 4.5,
+          icon: 'database',
+          color: 'text-blue-500'
+        },
+        {
+          title: 'Pendapatan Sewa',
+          value: 'RM 5,200,000',
+          target: 'RM 6,000,000',
+          change: 2.8,
+          icon: 'home',
+          color: 'text-green-500'
+        },
+        {
+          title: 'Projek Pembangunan',
+          value: '8',
+          target: '10',
+          change: 1.5,
+          icon: 'building',
+          color: 'text-yellow-500'
+        }
+      ],
+      charts: [
+        {
+          type: 'doughnut',
+          title: 'Agihan Harta Baitulmal',
+          data: {
+            labels: ['Hartanah', 'Tanah', 'Pelaburan', 'Tunai', 'Lain-lain'],
+            datasets: [{
+              data: [40, 25, 20, 10, 5],
+              backgroundColor: [
+                'rgba(255, 99, 132, 0.8)',
+                'rgba(54, 162, 235, 0.8)',
+                'rgba(255, 206, 86, 0.8)',
+                'rgba(75, 192, 192, 0.8)',
+                'rgba(153, 102, 255, 0.8)'
+              ]
+            }]
+          }
+        }
+      ],
+      tables: [
+        {
+          title: 'Projek Pembangunan Terkini',
+          headers: ['Projek', 'Lokasi', 'Nilai (RM)', 'Status'],
+          rows: [
+            ['Kompleks Komersial', 'Shah Alam', '25,000,000', 'Dalam Pembinaan'],
+            ['Pembangunan Tanah Wakaf', 'Klang', '15,000,000', 'Perancangan'],
+            ['Naik Taraf Bangunan', 'Petaling Jaya', '8,000,000', 'Tender']
+          ]
+        }
+      ]
+    },
+
+    'Bahagian Dakwah & Pemasaran': {
+      id: 'dakwah-marketing',
+      title: 'Dashboard Bahagian Dakwah & Pemasaran',
+      kpis: [
+        {
+          title: 'Program Dakwah',
+          value: '45',
+          target: '50',
+          change: 5.2,
+          icon: 'users',
+          color: 'text-blue-500'
+        },
+        {
+          title: 'Peserta Program',
+          value: '2,500',
+          target: '3,000',
+          change: 2.3,
+          icon: 'user-plus',
+          color: 'text-green-500'
+        },
+        {
+          title: 'Kadar Keberkesanan',
+          value: '85%',
+          target: '90%',
+          change: 1.5,
+          icon: 'trending-up',
+          color: 'text-purple-500'
+        }
+      ],
+      charts: [
+        {
+          type: 'bar',
+          title: 'Jenis Program Dakwah',
+          data: {
+            labels: ['Ceramah', 'Seminar', 'Bengkel', 'Kelas', 'Program Komuniti'],
+            datasets: [{
+              label: 'Bilangan Program',
+              data: [15, 10, 8, 7, 5],
+              backgroundColor: 'rgba(54, 162, 235, 0.8)'
+            }]
+          }
+        }
+      ],
+      tables: [
+        {
+          title: 'Program Terkini',
+          headers: ['Program', 'Lokasi', 'Peserta', 'Status'],
+          rows: [
+            ['Ceramah Ramadan', 'Masjid Al-Hidayah', '200', 'Selesai'],
+            ['Bengkel Solat', 'Dewan Komuniti', '150', 'Dalam Perancangan'],
+            ['Kelas Fardhu Ain', 'Surau An-Nur', '80', 'Sedang Berjalan']
+          ]
+        }
+      ]
+    },
+
+    'Bahagian Kesetiausahaan': {
+      id: 'secretariat',
+      title: 'Dashboard Bahagian Kesetiausahaan',
+      kpis: [
+        {
+          title: 'Mesyuarat Diurus',
+          value: '45',
+          target: '50',
+          change: 2.5,
+          icon: 'calendar',
+          color: 'text-blue-500'
+        },
+        {
+          title: 'Dokumen Diproses',
+          value: '1,250',
+          target: '1,500',
+          change: 3.2,
+          icon: 'file-text',
+          color: 'text-green-500'
+        },
+        {
+          title: 'Kadar Tindakan',
+          value: '92%',
+          target: '95%',
+          change: 1.5,
+          icon: 'check-square',
+          color: 'text-purple-500'
+        }
+      ],
+      charts: [
+        {
+          type: 'bar',
+          title: 'Jenis Mesyuarat',
+          data: {
+            labels: ['Lembaga Pengarah', 'Jawatankuasa', 'Pengurusan', 'Ad-hoc', 'Lain-lain'],
+            datasets: [{
+              label: 'Bilangan Mesyuarat',
+              data: [12, 15, 8, 6, 4],
+              backgroundColor: 'rgba(54, 162, 235, 0.8)'
+            }]
+          }
+        }
+      ],
+      tables: [
+        {
+          title: 'Status Tindakan Mesyuarat',
+          headers: ['Mesyuarat', 'Tarikh', 'Tindakan', 'Status'],
+          rows: [
+            ['Mesyuarat Lembaga', '15/01/2024', '25', 'Selesai'],
+            ['Mesyuarat JK Audit', '10/01/2024', '15', 'Dalam Tindakan'],
+            ['Mesyuarat Pengurusan', '5/01/2024', '10', 'Sedang Berjalan']
+          ]
+        }
+      ]
+    },
+
+    'Bahagian Risiko & Pematuhan': {
+      id: 'risk-compliance',
+      title: 'Risk & Compliance Division Dashboard',
+      kpis: [
+        {
+          title: 'Risk Score',
+          value: '85%',
+          target: '90%',
+          change: 2.1,
+          icon: 'shield',
+          color: 'text-purple-500'
+        },
+        {
+          title: 'Compliance Score',
+          value: '95%',
+          target: '100%',
+          change: 0.5,
+          icon: 'check-circle',
+          color: 'text-yellow-500'
+        },
+        {
+          title: 'Audit Findings',
+          value: '5',
+          target: '7',
+          change: 1.5,
+          icon: 'exclamation-triangle',
+          color: 'text-red-500'
+        },
+        {
+          title: 'Legal Cases',
+          value: '2',
+          target: '3',
+          change: 0.5,
+          icon: 'gavel',
+          color: 'text-blue-500'
+        }
+      ],
+      charts: [
+        {
+          type: 'bar',
+          title: 'Risk Distribution by Type',
+          data: {
+            labels: ['Operational', 'Financial', 'Legal', 'Regulatory', 'Others'],
+            datasets: [{
+              label: 'Risk Percentage',
+              data: [40, 30, 20, 10, 5],
+              backgroundColor: [
+                'rgba(75, 192, 192, 0.6)',
+                'rgba(54, 162, 235, 0.6)',
+                'rgba(255, 206, 86, 0.6)',
+                'rgba(255, 99, 132, 0.6)',
+                'rgba(153, 102, 255, 0.6)'
+              ]
+            }]
+          }
+        },
+        {
+          type: 'line',
+          title: 'Monthly Risk Trends',
+          data: {
+            labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+            datasets: [{
+              label: 'Risk Score',
+              data: [80, 85, 90, 95, 100, 105],
+              borderColor: 'rgb(75, 192, 192)',
+              tension: 0.1
+            }]
+          }
+        }
+      ],
+      tables: [
+        {
+          title: 'Risk Management Initiatives',
+          headers: ['Initiative', 'Objective', 'Status', 'Impact'],
+          rows: [
+            ['Risk Assessment', 'Identify and Mitigate Risks', 'Completed', 'Risk score reduced by 10%'],
+            ['Compliance Training', 'Ensure all policies are followed', 'In Progress', 'Training sessions ongoing'],
+            ['Audit Program', 'Regular audits to check compliance', 'Pending', 'Audit scheduled for next month'],
+            ['Legal Review', 'Review all contracts and agreements', 'Completed', 'Legal issues resolved']
+          ]
+        }
+      ]
+    },
+
+    'Bahagian Teknologi Maklumat': {
+      id: 'technology',
+      title: 'Dashboard Bahagian Teknologi Maklumat',
+      kpis: [
+        {
+          title: 'Infrastruktur IT',
+          value: '85%',
+          target: '90%',
+          change: 5.2,
+          icon: 'server',
+          color: 'text-blue-500'
+        },
+        {
+          title: 'Pembangunan Perisian',
+          value: '75%',
+          target: '80%',
+          change: 2.1,
+          icon: 'code',
+          color: 'text-green-500'
+        },
+        {
+          title: 'Keselamatan Data',
+          value: '95%',
+          target: '100%',
+          change: 0.5,
+          icon: 'lock',
+          color: 'text-purple-500'
+        },
+        {
+          title: 'Cybersecurity',
+          value: '80%',
+          target: '85%',
+          change: 1.5,
+          icon: 'shield',
+          color: 'text-yellow-500'
+        }
+      ],
+      charts: [
+        {
+          type: 'bar',
+          title: 'Penggunaan Infrastruktur IT',
+          data: {
+            labels: ['Pelayan', 'Pangkalan Data', 'Rangkaian', 'Storan', 'Awan'],
+            datasets: [{
+              label: 'Peratusan Penggunaan',
+              data: [70, 60, 80, 90, 50],
+              backgroundColor: 'rgba(54, 162, 235, 0.8)'
+            }]
+          }
+        },
+        {
+          type: 'line',
+          title: 'Monthly Software Development',
+          data: {
+            labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+            datasets: [{
+              label: 'Number of Projects',
+              data: [5, 6, 7, 8, 9, 10],
+              borderColor: 'rgb(75, 192, 192)',
+              tension: 0.1
+            }]
+          }
+        }
+      ],
+      tables: [
+        {
+          title: 'IT Projects',
+          headers: ['Project', 'Objective', 'Status', 'Budget'],
+          rows: [
+            ['Project A', 'Upgrade ERP System', 'Completed', 'RM 500,000'],
+            ['Project B', 'Develop Mobile App', 'In Progress', 'RM 300,000'],
+            ['Project C', 'Implement Data Analytics', 'Pending', 'RM 400,000'],
+            ['Project D', 'Secure Cloud Infrastructure', 'Completed', 'RM 600,000']
+          ]
+        }
+      ]
+    },
+
+    'Bahagian Komunikasi Korporat': {
+      id: 'corporate-communications',
+      title: 'Corporate Communications Division Dashboard',
+      kpis: [
+        {
+          title: 'Social Media Engagement',
+          value: '500',
+          target: '600',
+          change: 10.2,
+          icon: 'hashtag',
+          color: 'text-blue-500'
+        },
+        {
+          title: 'Public Speaking',
+          value: '200',
+          target: '250',
+          change: 15.4,
+          icon: 'microphone',
+          color: 'text-green-500'
+        },
+        {
+          title: 'Media Relations',
+          value: '30',
+          target: '35',
+          change: 5.2,
+          icon: 'newspaper',
+          color: 'text-yellow-500'
+        },
+        {
+          title: 'Marketing ROI',
+          value: 'RM 1.5M',
+          target: 'RM 1.8M',
+          change: 1.5,
+          icon: 'dollar-sign',
+          color: 'text-purple-500'
+        }
+      ],
+      charts: [
+        {
+          type: 'bar',
+          title: 'Communication Channels',
+          data: {
+            labels: ['Social Media', 'Public Speaking', 'Media Relations', 'Marketing', 'Others'],
+            datasets: [{
+              label: 'Engagement',
+              data: [300, 200, 150, 100, 50],
+              backgroundColor: [
+                'rgba(75, 192, 192, 0.6)',
+                'rgba(54, 162, 235, 0.6)',
+                'rgba(255, 206, 86, 0.6)',
+                'rgba(255, 99, 132, 0.6)',
+                'rgba(153, 102, 255, 0.6)'
+              ]
+            }]
+          }
+        },
+        {
+          type: 'line',
+          title: 'Monthly Media Relations',
+          data: {
+            labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+            datasets: [{
+              label: 'Number of Interviews',
+              data: [5, 10, 15, 20, 25, 30],
+              borderColor: 'rgb(75, 192, 192)',
+              tension: 0.1
+            }]
+          }
+        }
+      ],
+      tables: [
+        {
+          title: 'Marketing Campaigns',
+          headers: ['Campaign', 'Objective', 'Reach', 'Conversion Rate'],
+          rows: [
+            ['Campaign X', 'Increase Followers', '10,000', '10%'],
+            ['Campaign Y', 'Promote Event', '5,000', '15%'],
+            ['Campaign Z', 'Run Digital Ads', '2,000', '20%'],
+            ['Campaign W', 'Host Public Talk', '1,000', '25%']
+          ]
+        }
+      ]
+    }
+  };
+
+  // Modify your return statement to add the department selector
   return (
     <div className="flex flex-col w-full h-full overflow-x-hidden overflow-y-auto">
+      <div className="p-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+        <select
+          value={selectedDepartment}
+          onChange={(e) => setSelectedDepartment(e.target.value)}
+          className="w-full md:w-96 lg:w-[32rem] px-3 py-2 text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        >
+          {departments.map((dept) => (
+            <option key={dept} value={dept}>
+              {dept}
+            </option>
+          ))}
+        </select>
+      </div>
+      
       <div className="flex-grow p-4 space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
-          {dashboardCards.map((card) => (
-            <div 
-              key={card.id}
-              className="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden flex flex-col h-full"
-            >
-              <div className="p-6 flex-grow flex flex-col">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-200">{card.title}</h3>
-                  {card.id === 'zakat-trends' && (
-                    <FormSelect
-                      value={timeFilter}
-                      onChange={(e) => setTimeFilter(e.target.value as typeof timeFilter)}
-                      className="w-40"
-                    >
-                      <option value="7days">Last 7 Days</option>
-                      <option value="1month">Last Month</option>
-                      <option value="3months">Last 3 Months</option>
-                      <option value="all">All Time</option>
-                    </FormSelect>
-                  )}
-                </div>
-                <div className="flex-grow">
-                  {(card.id === 'zakat-overview' || card.id === 'payment-status') ? (
-                    <div className="grid grid-cols-2 gap-4">
-                      {Array.isArray(card.content) && card.content.map((item, index) => (
-                        <div key={index} className="text-center p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                          <div className="flex justify-center mb-2">
-                            {item.icon && (
-                              <span className={`text-2xl ${('color' in item) ? item.color : 'text-blue-500'}`}>
-                                <i className={`feather icon-${item.icon.toLowerCase()}`}></i>
-                              </span>
-                            )}
+        {selectedDepartment === 'Pengedaran & Kutipan Zakat' ? (
+          // Zakat dashboard content
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
+            {dashboardCards.map((card) => (
+              <div 
+                key={card.id}
+                className="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden flex flex-col h-full"
+              >
+                <div className="p-6 flex-grow flex flex-col">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-200">{card.title}</h3>
+                    {card.id === 'zakat-trends' && (
+                      <FormSelect
+                        value={timeFilter}
+                        onChange={(e) => setTimeFilter(e.target.value as typeof timeFilter)}
+                        className="w-40"
+                      >
+                        <option value="7days">Last 7 Days</option>
+                        <option value="1month">Last Month</option>
+                        <option value="3months">Last 3 Months</option>
+                        <option value="all">All Time</option>
+                      </FormSelect>
+                    )}
+                  </div>
+                  <div className="flex-grow">
+                    {(card.id === 'zakat-overview' || card.id === 'payment-status') ? (
+                      <div className="grid grid-cols-2 gap-4">
+                        {Array.isArray(card.content) && card.content.map((item, index) => (
+                          <div key={index} className="text-center p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                            <div className="flex justify-center mb-2">
+                              {item.icon && (
+                                <span className={`text-2xl ${('color' in item) ? item.color : 'text-blue-500'}`}>
+                                  <i className={`feather icon-${item.icon.toLowerCase()}`}></i>
+                                </span>
+                              )}
+                            </div>
+                            <div className={`text-2xl font-bold ${('color' in item) ? item.color : 'text-blue-500'} dark:text-blue-400`}>
+                              {!loading ? item.value : <LoadingIcon icon="spinning-circles" className="w-8 h-8 mx-auto" />}
+                            </div>
+                            <div className="mt-1 text-sm text-gray-600 dark:text-gray-400">{item.label}</div>
                           </div>
-                          <div className={`text-2xl font-bold ${('color' in item) ? item.color : 'text-blue-500'} dark:text-blue-400`}>
-                            {!loading ? item.value : <LoadingIcon icon="spinning-circles" className="w-8 h-8 mx-auto" />}
-                          </div>
-                          <div className="mt-1 text-sm text-gray-600 dark:text-gray-400">{item.label}</div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : card.id === 'zakat-trends' ? (
-                    <div className="h-[300px]">
-                      <Line 
-                        data={zakatTrends} 
-                        options={{
-                          responsive: true,
-                          maintainAspectRatio: false,
-                          plugins: {
-                            legend: {
-                              position: 'top',
-                            },
-                            title: {
-                              display: true,
-                              text: 'Daily Zakat Collections'
-                            }
-                          },
-                          scales: {
-                            y: {
-                              beginAtZero: true,
-                              title: {
-                                display: true,
-                                text: 'Amount (MYR)',
-                              }
-                            }
-                          }
-                        }} 
-                      />
-                    </div>
-                  ) : card.id === 'zakat-types' ? (
-                    <div className="h-[300px]">
-                      <Doughnut 
-                        data={zakatTypeDistribution}
-                         options={zakatTypeOptions}
-                      />
-                    </div>
-                  ) : card.id === 'top-contributors' ? (
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                        <thead className="bg-gray-50 dark:bg-gray-700">
-                          <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                              Name
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                              Total Amount
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                              Contributions
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
-                          {topContributors.map((contributor, index) => (
-                            <tr key={index} className={index % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-700'}>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                                {contributor.name}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                                {contributor.totalAmount.toLocaleString('en-MY', { 
-                                  style: 'currency', 
-                                  currency: 'MYR' 
-                                })}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                                {contributor.contributions}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : card.id === 'contributor-demographics' ? (
-                    <div className="flex flex-col h-full">
-                      <div className="mb-4">
-                        <h4 className="text-sm font-medium text-gray-500">Age Distribution</h4>
+                        ))}
                       </div>
+                    ) : card.id === 'zakat-trends' ? (
                       <div className="h-[300px]">
-                        <Bar 
-                          data={ageDistribution}
+                        <Line 
+                          data={zakatTrends} 
                           options={{
                             responsive: true,
                             maintainAspectRatio: false,
                             plugins: {
                               legend: {
-                                display: false
+                                position: 'top',
                               },
-                              tooltip: {
-                                callbacks: {
-                                  label: (context) => {
-                                    return `Contributors: ${context.raw}`;
-                                  }
-                                }
+                              title: {
+                                display: true,
+                                text: 'Daily Zakat Collections'
                               }
                             },
                             scales: {
@@ -2236,164 +3734,325 @@ const getEarliestContactDate = async () => {
                                 beginAtZero: true,
                                 title: {
                                   display: true,
-                                  text: 'Number of Contributors'
+                                  text: 'Amount (MYR)',
                                 }
                               }
                             }
-                          }}
+                          }} 
                         />
                       </div>
-                    </div>
-                  ) : card.id === 'payment-methods' ? (
-                    <div className="flex flex-col h-full">
+                    ) : card.id === 'zakat-types' ? (
+                      <div className="h-[300px]">
+                        <Doughnut 
+                          data={zakatTypeDistribution}
+                           options={zakatTypeOptions}
+                        />
+                      </div>
+                    ) : card.id === 'top-contributors' ? (
                       <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                          <thead className="bg-gray-50 dark:bg-gray-800">
+                          <thead className="bg-gray-50 dark:bg-gray-700">
                             <tr>
                               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                Method
-                              </th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                Usage
+                                Name
                               </th>
                               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                                 Total Amount
                               </th>
                               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                Avg. Amount
+                                Contributions
                               </th>
                             </tr>
                           </thead>
-                          <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-900 dark:divide-gray-700">
-                            {paymentMethodStats.map((stat, index) => (
-                              <tr key={index} className={index % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800'}>
+                          <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
+                            {topContributors.map((contributor, index) => (
+                              <tr key={index} className={index % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-700'}>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                                  {stat.method}
+                                  {contributor.name}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                                  {stat.count} ({((stat.count / paymentMethodStats.reduce((acc, curr) => acc + curr.count, 0)) * 100).toFixed(1)}%)
+                                  {contributor.totalAmount.toLocaleString('en-MY', { 
+                                    style: 'currency', 
+                                    currency: 'MYR' 
+                                  })}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                                  {stat.amount.toLocaleString('en-MY', { style: 'currency', currency: 'MYR' })}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                                  {(stat.amount / stat.count).toLocaleString('en-MY', { style: 'currency', currency: 'MYR' })}
+                                  {contributor.contributions}
                                 </td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
                       </div>
-                    </div>
-                  ) : card.id === 'regional-analysis' ? (
-                    <div className="flex flex-col h-full">
-                      <div className="mb-4 flex justify-between items-center">
-                        <h4 className="text-sm font-medium text-gray-500">Collection by Region</h4>
-                      </div>
-                      <div className="h-[300px]">
-                        <Bar 
-                          data={{
-                            labels: regionalStats.map(r => r.state),
-                            datasets: [
-                              {
-                                label: 'Total Amount',
-                                data: regionalStats.map(r => r.totalAmount),
-                                backgroundColor: 'rgba(54, 162, 235, 0.6)',
-                                yAxisID: 'y'
-                              },
-                              {
-                                label: 'Contributors',
-                                data: regionalStats.map(r => r.contributors),
-                                backgroundColor: 'rgba(75, 192, 192, 0.6)',
-                                yAxisID: 'y1'
-                              }
-                            ]
-                          }}
-                          options={{
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: {
-                              legend: {
-                                position: 'top'
-                              },
-                              tooltip: {
-                                callbacks: {
-                                  label: (context) => {
-                                    const datasetLabel = context.dataset.label;
-                                    const value = context.raw as number;
-                                    if (datasetLabel === 'Total Amount') {
-                                      return `${datasetLabel}: ${value.toLocaleString('en-MY', { style: 'currency', currency: 'MYR' })}`;
+                    ) : card.id === 'contributor-demographics' ? (
+                      <div className="flex flex-col h-full">
+                        <div className="mb-4">
+                          <h4 className="text-sm font-medium text-gray-500">Age Distribution</h4>
+                        </div>
+                        <div className="h-[300px]">
+                          <Bar 
+                            data={ageDistribution}
+                            options={{
+                              responsive: true,
+                              maintainAspectRatio: false,
+                              plugins: {
+                                legend: {
+                                  display: false
+                                },
+                                tooltip: {
+                                  callbacks: {
+                                    label: (context) => {
+                                      return `Contributors: ${context.raw}`;
                                     }
-                                    return `${datasetLabel}: ${value}`;
+                                  }
+                                }
+                              },
+                              scales: {
+                                y: {
+                                  beginAtZero: true,
+                                  title: {
+                                    display: true,
+                                    text: 'Number of Contributors'
                                   }
                                 }
                               }
-                            },
-                            scales: {
-                              y: {
-                                type: 'linear',
-                                position: 'left',
-                                title: {
-                                  display: true,
-                                  text: 'Total Amount (MYR)'
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ) : card.id === 'payment-methods' ? (
+                      <div className="flex flex-col h-full">
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                            <thead className="bg-gray-50 dark:bg-gray-800">
+                              <tr>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                  Method
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                  Usage
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                  Total Amount
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                  Avg. Amount
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-900 dark:divide-gray-700">
+                              {paymentMethodStats.map((stat, index) => (
+                                <tr key={index} className={index % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800'}>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                                    {stat.method}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                                    {stat.count} ({((stat.count / paymentMethodStats.reduce((acc, curr) => acc + curr.count, 0)) * 100).toFixed(1)}%
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                                    {stat.amount.toLocaleString('en-MY', { style: 'currency', currency: 'MYR' })}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                                    {(stat.amount / stat.count).toLocaleString('en-MY', { style: 'currency', currency: 'MYR' })}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : card.id === 'regional-analysis' ? (
+                      <div className="flex flex-col h-full">
+                        <div className="mb-4 flex justify-between items-center">
+                          <h4 className="text-sm font-medium text-gray-500">Collection by Region</h4>
+                        </div>
+                        <div className="h-[300px]">
+                          <Bar 
+                            data={{
+                              labels: regionalStats.map(r => r.state),
+                              datasets: [
+                                {
+                                  label: 'Total Amount',
+                                  data: regionalStats.map(r => r.totalAmount),
+                                  backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                                  yAxisID: 'y'
+                                },
+                                {
+                                  label: 'Contributors',
+                                  data: regionalStats.map(r => r.contributors),
+                                  backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                                  yAxisID: 'y1'
+                                }
+                              ]
+                            }}
+                            options={{
+                              responsive: true,
+                              maintainAspectRatio: false,
+                              plugins: {
+                                legend: {
+                                  position: 'top'
+                                },
+                                tooltip: {
+                                  callbacks: {
+                                    label: (context) => {
+                                      const datasetLabel = context.dataset.label;
+                                      const value = context.raw as number;
+                                      if (datasetLabel === 'Total Amount') {
+                                        return `${datasetLabel}: ${value.toLocaleString('en-MY', { style: 'currency', currency: 'MYR' })}`;
+                                      }
+                                      return `${datasetLabel}: ${value}`;
+                                    }
+                                  }
                                 }
                               },
-                              y1: {
-                                type: 'linear',
-                                position: 'right',
-                                title: {
-                                  display: true,
-                                  text: 'Number of Contributors'
+                              scales: {
+                                y: {
+                                  type: 'linear',
+                                  position: 'left',
+                                  title: {
+                                    display: true,
+                                    text: 'Total Amount (MYR)'
+                                  }
                                 },
-                                grid: {
-                                  drawOnChartArea: false
+                                y1: {
+                                  type: 'linear',
+                                  position: 'right',
+                                  title: {
+                                    display: true,
+                                    text: 'Number of Contributors'
+                                  },
+                                  grid: {
+                                    drawOnChartArea: false
+                                  }
                                 }
                               }
-                            }
-                          }}
-                        />
-                      </div>
-                      <div className="mt-4">
-                        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                          <thead className="bg-gray-50 dark:bg-gray-800">
-                            <tr>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                State
-                              </th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                Collection Rate
-                              </th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                Avg. per Contributor
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-900 dark:divide-gray-700">
-                            {regionalStats.map((region, index) => (
-                              <tr key={index} className={index % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800'}>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                                  {region.state}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                                  {region.collectionRate.toFixed(1)}%
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                                  {(region.totalAmount / region.contributors).toLocaleString('en-MY', { style: 'currency', currency: 'MYR' })}
-                                </td>
+                            }}
+                          />
+                        </div>
+                        <div className="mt-4">
+                          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                            <thead className="bg-gray-50 dark:bg-gray-800">
+                              <tr>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                  State
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                  Collection Rate
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                  Avg. per Contributor
+                                </th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-900 dark:divide-gray-700">
+                              {regionalStats.map((region, index) => (
+                                <tr key={index} className={index % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800'}>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                                    {region.state}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                                    {region.collectionRate.toFixed(1)}%
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                                    {(region.totalAmount / region.contributors).toLocaleString('en-MY', { style: 'currency', currency: 'MYR' })}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="text-center text-gray-600 dark:text-gray-400">No data available</div>
-                  )}
+                    ) : (
+                      <div className="text-center text-gray-600 dark:text-gray-400">No data available</div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          // New department dashboard rendering
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
+            {/* KPIs */}
+            {departmentDashboards[selectedDepartment]?.kpis.map((kpi, index) => (
+              <div key={index} className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">{kpi.title}</h3>
+                  <span className={`text-2xl ${kpi.color}`}>
+                    <i className={`feather icon-${kpi.icon}`}></i>
+                  </span>
+                </div>
+                <div className="mt-4">
+                  <div className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+                    {kpi.value}
+                  </div>
+                  <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    Target: {kpi.target}
+                  </div>
+                  <div className={`mt-2 text-sm ${(kpi.change || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                    {(kpi.change || 0) >= 0 ? '↑' : '↓'} {Math.abs(kpi.change ?? 0)}%
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {/* Charts */}
+            {departmentDashboards[selectedDepartment]?.charts.map((chart, index) => (
+              <div key={index} className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-4">
+                  {chart.title}
+                </h3>
+                <div className="h-[300px]">
+                  {chart.type === 'bar' && <Bar data={chart.data} options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                  }} />}
+                  {chart.type === 'line' && <Line data={chart.data} options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                  }} />}
+                  {chart.type === 'doughnut' && <Doughnut data={chart.data} options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                  }} />}
+                </div>
+              </div>
+            ))}
+
+            {/* Tables */}
+            {departmentDashboards[selectedDepartment]?.tables?.map((table, index) => (
+              <div key={index} className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 col-span-2">
+                <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-4">
+                  {table.title}
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead className="bg-gray-50 dark:bg-gray-700">
+                      <tr>
+                        {table.headers.map((header, i) => (
+                          <th key={i} className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                            {header}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
+                      {table.rows.map((row, i) => (
+                        <tr key={i}>
+                          {row.map((cell, j) => (
+                            <td key={j} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                              {cell}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
