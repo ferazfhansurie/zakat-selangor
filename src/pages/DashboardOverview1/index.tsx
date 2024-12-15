@@ -17,6 +17,7 @@ import LeafletMap from "@/components/LeafletMap";
 import { Menu } from "@/components/Base/Headless";
 import Table from "@/components/Base/Table";
 import axios from 'axios';
+import { ReactMic } from 'react-mic';
 
 import { getFirebaseToken, messaging } from "../../firebaseconfig";
 import { getAuth } from "firebase/auth";

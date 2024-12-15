@@ -7265,14 +7265,6 @@ console.log(prompt);
             >
               <Lucide icon={isRecording ? "StopCircle" : "Mic"} className="w-5 h-5" />
             </button>
-            <ReactMic
-              record={isRecording}
-              className="w-44 rounded-md h-10 mr-2 ml-2"
-              onStop={onStop}
-              strokeColor="#0000CD"
-              backgroundColor="#FFFFFF"
-              mimeType="audio/webm"
-            />
           </div>
           <div className="flex flex-col space-y-2">
             {audioBlob && (

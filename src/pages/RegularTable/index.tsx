@@ -19,6 +19,8 @@ import { useNavigate } from "react-router-dom";
 import LoadingIcon from "@/components/Base/LoadingIcon";
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
+import { ReactMic } from 'react-mic';
+
 
 const firebaseConfig = {
   apiKey: "AIzaSyCc0oSHlqlX7fLeqqonODsOIC3XA8NI7hc",
