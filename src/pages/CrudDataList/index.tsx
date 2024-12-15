@@ -3486,6 +3486,7 @@ Jane,Smith,60198765432,jane@example.com,XYZ Corp,456 Elm St,Branch B,2024-06-30,
                           onChange={(date: Date | null) => date && setCurrentScheduledMessage({...currentScheduledMessage!, scheduledTime: Timestamp.fromDate(date)})}
                           dateFormat="MMMM d, yyyy"
                           className="w-full border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                          minDate={currentScheduledMessage?.scheduledTime.toDate() ?? undefined}
                         />
                         <DatePicker
                           selected={currentScheduledMessage?.scheduledTime.toDate()}
@@ -3496,6 +3497,7 @@ Jane,Smith,60198765432,jane@example.com,XYZ Corp,456 Elm St,Branch B,2024-06-30,
                           timeCaption="Time"
                           dateFormat="h:mm aa"
                           className="w-full border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                          minDate={currentScheduledMessage?.scheduledTime.toDate() ?? undefined}
                         />
                       </div>
                     </div>
@@ -4323,6 +4325,7 @@ Jane,Smith,60198765432,jane@example.com,XYZ Corp,456 Elm St,Branch B,2024-06-30,
                         onChange={(date: Date | null) => date && setBlastStartDate(date)}
                         dateFormat="MMMM d, yyyy"
                         className="w-full mt-1 border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                        minDate={blastStartDate ?? undefined}
                       />
                       <DatePicker
                         selected={blastStartTime}
@@ -4333,6 +4336,7 @@ Jane,Smith,60198765432,jane@example.com,XYZ Corp,456 Elm St,Branch B,2024-06-30,
                         timeCaption="Time"
                         dateFormat="h:mm aa"
                         className="w-full mt-1 border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                        minDate={blastStartTime ?? undefined}
                       />
                     </div>
                   </div>

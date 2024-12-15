@@ -8,6 +8,14 @@ export default defineConfig({
     commonjsOptions: {
       include: ["tailwind.config.js", "node_modules/**"],
     },
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'], // Example: separate vendor libraries
+        },
+      },
+    },
+    chunkSizeWarningLimit: 1000, // Increase the limit if necessary
   },
   optimizeDeps: {
     include: ["tailwind-config"],

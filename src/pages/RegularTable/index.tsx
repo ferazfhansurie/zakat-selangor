@@ -474,7 +474,7 @@ function Main() {
                   selectsEnd
                   startDate={startDate ? startDate : undefined}
                   endDate={endDate ? endDate : undefined}
-                  minDate={startDate ? startDate : undefined}
+                  minDate={startDate ?? undefined}
                   placeholderText="End Date"
                   className="relative w-full h-[40px] pr-10 !box text-lg"
                 />

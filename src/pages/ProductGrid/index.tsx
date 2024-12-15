@@ -772,7 +772,7 @@ const [submittedOrders, setSubmittedOrders] = useState<Order[]>([]);
     selectsEnd
     startDate={dateRange[0] || undefined}
     endDate={dateRange[1] || undefined}
-    minDate={dateRange[0] || undefined}
+    minDate={dateRange[0] ?? undefined}
     isClearable
     placeholderText="End Date"
     className="bg-white rounded"

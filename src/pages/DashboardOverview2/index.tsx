@@ -646,6 +646,7 @@ const Main = () => {
                   startDate={dateRange[0]}
                   endDate={dateRange[1]}
                   className="bg-white rounded"
+                  minDate={dateRange[0] ?? undefined}
                 />
                 <DatePicker
                   selected={dateRange[1]}
@@ -654,6 +655,7 @@ const Main = () => {
                   startDate={dateRange[0]}
                   endDate={dateRange[1]}
                   className="bg-white rounded"
+                  minDate={dateRange[1] ?? undefined}
                 />
               </div>
               <div className="p-5 flex space-x-4">
