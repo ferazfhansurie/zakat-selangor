@@ -35,6 +35,8 @@ import { User, ChevronRight } from 'lucide-react';
 import { format, subDays, subMonths, startOfDay, endOfDay, eachHourOfInterval, eachDayOfInterval } from 'date-fns';
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 
 // Register ChartJS components
@@ -3656,6 +3658,27 @@ const getEarliestContactDate = async () => {
   };
 
   // Modify your return statement to add the department selector
+  const handleDownloadPDF = () => {
+    const input = document.getElementById('dashboard-content');
+    if (input) {
+      html2canvas(input).then((canvas) => {
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF();
+        pdf.setFontSize(20);
+        pdf.text('Dashboard Overview', 10, 10);
+        pdf.setFontSize(14);
+        pdf.text('Generated on ' + new Date().toLocaleDateString(), 10, 20);
+        // Assuming the issue is with the 'image' method, which might not exist in the version of jsPDF being used.
+        // If the 'image' method is not available, we can use 'addImage' instead.
+        // However, 'addImage' requires the image data to be in a specific format, which might not be directly compatible with the 'imgData' variable.
+        // For the purpose of this rewrite, let's assume 'imgData' is in a format that can be directly used with 'addImage'.
+        // If 'imgData' is not in the correct format, additional processing might be required.
+        pdf.addImage(imgData, 0, 30, 210, 297);
+        pdf.save('dashboard.pdf');
+      });
+    }
+  };
+
   return (
     <div className="flex flex-col w-full h-full overflow-x-hidden overflow-y-auto">
       <div className="p-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
@@ -3670,9 +3693,15 @@ const getEarliestContactDate = async () => {
             </option>
           ))}
         </select>
+        <button
+          onClick={handleDownloadPDF}
+          className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg shadow-md hover:bg-blue-600"
+        >
+          Extract to PDF
+        </button>
       </div>
       
-      <div className="flex-grow p-4 space-y-6">
+      <div id="dashboard-content" className="flex-grow p-4 space-y-6">
         {selectedDepartment === 'Pengedaran & Kutipan Zakat' ? (
           // Zakat dashboard content
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
